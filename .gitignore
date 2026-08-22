@@ -10,6 +10,7 @@ protein-finds-remediated-*/
 *.sha256
 *.diff
 *.csv
+!fixtures/vendor-catalog-sanitized.csv
 advisor-ideas-log.md
 README-platform.md
 competitive-audit.md
