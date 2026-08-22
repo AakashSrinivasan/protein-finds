@@ -4,6 +4,7 @@ const groceryIds = new Set(groceryProducts.map(product => product.id));
 const locationData = window.PROTEIN_LOCATION;
 const app = document.querySelector('#appMain');
 const liveRegion = document.querySelector('#liveRegion');
+const { answerAsk } = window.AskProtein;
 const storageKey = 'protein-finds-shell-state-v1';
 const scrollKey = 'protein-finds-scroll-v1';
 
@@ -35,7 +36,9 @@ const state = {
   mapCenter: null,
   mapMoved: false,
   locationView: 'list',
-  selectedStore: null
+  selectedStore: null,
+  askQuery: '',
+  askAnswer: null
 };
 let currentRoute = null;
 let deferredInstallPrompt = null;
@@ -69,8 +72,10 @@ function updateCounts() {
 function parseRoute() {
   const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (hash.startsWith('product/')) return { name: 'product', id: hash.slice(8) };
-  return { name: ['discover', 'nearby', 'saved', 'basket'].includes(hash) ? hash : 'discover' };
+  return { name: ['discover', 'nearby', 'ask', 'saved', 'basket'].includes(hash) ? hash : 'discover' };
 }
+
+const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 
 function saveScroll() {
   if (!currentRoute) return;
@@ -239,6 +244,26 @@ function renderSaved() {
   app.innerHTML = `<section class="screen" data-screen="saved">${screenHead('Your shortlist', 'Saved finds', 'Keep exact products close while you build the trip.')}${saved.length ? `<div class="product-list">${saved.map(productCard).join('')}</div>` : `<div class="empty-card"><span class="state-icon">♡</span><h2>No saved products</h2><p>Save a shelf-worthy option from Discover. It will stay on this device.</p><a class="primary" href="#discover">Browse products</a></div>`}</section>`;
 }
 
+function askPlanMarkup(answer) {
+  const plan = answer.queryPlan;
+  const filters = Object.entries(plan.filters).map(([field, value]) => `${field}: ${value}`).join(' · ') || 'none';
+  const constraints = plan.constraints.join(', ') || 'none';
+  return `<details class="query-plan" data-query-plan><summary>How the agent answered</summary><dl><div><dt>Intent</dt><dd>${escapeHtml(plan.intent)}</dd></div><div><dt>Filters</dt><dd>${escapeHtml(filters)}</dd></div><div><dt>Constraints</dt><dd>${escapeHtml(constraints)}</dd></div><div><dt>Sort</dt><dd>${escapeHtml(plan.sort || 'none')}</dd></div></dl><p>Grounded local catalog rules · no invented products</p></details>`;
+}
+
+function askRecommendationMarkup(item) {
+  const product = byId(item.productId);
+  if (!product) return '';
+  const citations = item.citations.map(citation => `<li><code>${escapeHtml(citation.field)}</code>: ${escapeHtml(Array.isArray(citation.value) ? citation.value.join(', ') : citation.value)}</li>`).join('');
+  return `<article class="ask-result" data-ask-product-id="${escapeHtml(product.id)}"><p class="eyebrow">Catalog match</p><h2><a href="#product/${escapeHtml(product.id)}">${escapeHtml(product.name)}</a></h2><p>${escapeHtml(item.reason)}</p><div class="ask-facts"><span><b>${escapeHtml(item.facts.protein)}</b> protein</span><span><b>${escapeHtml(item.facts.calories)}</b> calories</span><span><b>${escapeHtml(item.facts.price)}</b></span><span><b>${escapeHtml(item.facts.store)}</b></span><span><b>${escapeHtml(item.facts.freshness)}</b></span><span><b>${escapeHtml(item.facts.availability)}</b></span></div><details class="field-citations"><summary>Fields used</summary><ul>${citations}</ul></details><div class="ask-actions"><a class="secondary" href="#product/${escapeHtml(product.id)}">View product</a><button class="primary" type="button" data-add="${escapeHtml(product.id)}">${state.basket.includes(product.id) ? 'In basket' : 'Add to basket'}</button></div></article>`;
+}
+
+function renderAsk() {
+  const answer = state.askAnswer;
+  const output = answer ? `<section class="ask-answer" aria-live="polite"><div class="ask-summary"><span class="agent-avatar" aria-hidden="true">PF</span><div><b>${escapeHtml(answer.summary)}</b><span>${answer.recommendations.length ? 'These are grounded catalog results; price, location and stock remain labeled seeded or unknown.' : 'Try a supported shopping prompt. Unsupported requests fail closed.'}</span></div></div>${answer.recommendations.map(askRecommendationMarkup).join('') || '<div class="empty-card"><h2>No grounded match</h2><p>No catalog record survived the request. Nothing was invented.</p></div>'}${askPlanMarkup(answer)}</section>` : '<div class="ask-starter"><span class="agent-avatar" aria-hidden="true">PF</span><div><h2>Ask me what to buy</h2><p>I can find cheap breakfast protein, soy-free snacks, protein cereal, or improve the basket already on this device.</p></div></div>';
+  app.innerHTML = `<section class="screen" data-screen="ask">${screenHead('Your grocery agent', 'Ask Protein Finds', 'Ask a normal shopping question and get an immediate catalog-grounded answer.')}<div class="freshness">Demo catalog · no live price or inventory · no health advice</div><form class="ask-form" id="askForm"><label for="askInput">What do you need?</label><div><input id="askInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="e.g. cheap breakfast protein"><button class="primary" type="submit" aria-label="Send question">↑</button></div></form><div class="prompt-row" aria-label="Example questions">${['cheap breakfast protein','soy-free snacks','best protein cereal','improve my basket'].map(prompt => `<button type="button" data-ask-prompt="${prompt}">${prompt}</button>`).join('')}</div>${output}</section>`;
+}
+
 function renderProduct(id) {
   const product = byId(id);
   if (!product) {
@@ -292,6 +317,7 @@ function render() {
   document.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-current', tab.dataset.tab === currentRoute.name ? 'page' : 'false'));
   if (currentRoute.name === 'discover') renderDiscover();
   else if (currentRoute.name === 'nearby') renderNearby();
+  else if (currentRoute.name === 'ask') renderAsk();
   else if (currentRoute.name === 'saved') renderSaved();
   else if (currentRoute.name === 'basket') renderBasket();
   else renderProduct(currentRoute.id);
@@ -315,16 +341,24 @@ document.addEventListener('change', event => {
 });
 
 document.addEventListener('submit', event => {
-  if (event.target.id !== 'locationForm') return;
-  event.preventDefault();
-  const center = locationData.findZipCenter(new FormData(event.target).get('zip'));
-  if (center) setLocation(center);
-  else {
-    state.locationStatus = 'denied';
-    state.locationMessage = 'That ZIP is outside this demo. Try 95113, 95129, or 95014.';
-    renderNearby();
-    requestAnimationFrame(() => document.querySelector('#zipInput')?.focus());
+  if (event.target.id === 'locationForm') {
+    event.preventDefault();
+    const center = locationData.findZipCenter(new FormData(event.target).get('zip'));
+    if (center) setLocation(center);
+    else {
+      state.locationStatus = 'denied';
+      state.locationMessage = 'That ZIP is outside this demo. Try 95113, 95129, or 95014.';
+      renderNearby();
+      requestAnimationFrame(() => document.querySelector('#zipInput')?.focus());
+    }
+    return;
   }
+  if (event.target.id !== 'askForm') return;
+  event.preventDefault();
+  state.askQuery = String(new FormData(event.target).get('query') || '').trim();
+  state.askAnswer = answerAsk({query:state.askQuery, products:groceryProducts, basketIds:state.basket});
+  renderAsk();
+  document.querySelector('.ask-answer')?.scrollIntoView({block:'start'});
 });
 
 document.addEventListener('click', event => {
@@ -344,6 +378,8 @@ document.addEventListener('click', event => {
   if (remove) { state.basket = state.basket.filter(id => id !== remove.dataset.remove); persist(); renderBasket(); return; }
   const category = event.target.closest('[data-category]');
   if (category) { state.category = category.dataset.category; persist(); renderDiscover(); return; }
+  const askPrompt = event.target.closest('[data-ask-prompt]');
+  if (askPrompt) { state.askQuery = askPrompt.dataset.askPrompt; state.askAnswer = answerAsk({query:state.askQuery, products:groceryProducts, basketIds:state.basket}); renderAsk(); return; }
   const stateAction = event.target.closest('[data-state-action]');
   if (stateAction) { state.dataState = navigator.onLine ? 'ready' : 'offline'; renderDiscover(); return; }
   const useLocation = event.target.closest('[data-use-location]');
