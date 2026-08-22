@@ -141,7 +141,7 @@ The importer and accepted-only application boundary:
 
 The sanitized contract fixture is `fixtures/vendor-catalog-sanitized.csv`. It deliberately contains one accepted row plus duplicate identities, a verified-value conflict, a bad package unit, a missing timestamp, and a stale row. It contains no private vendor data.
 
-There is intentionally no Supabase schema, remote persistence, broad API import, UI migration, or model-backed ranking in V0 of this contract.
+There is intentionally no Supabase dependency, broad unauthenticated import, or model-backed ranking in V0. The downstream durable storage boundary is implemented in `backend/` and documented in `BACKEND.md`: SQLite retains complete catalog revisions and import receipts, the public API uses an explicit safe-field projection, and the authorized import route commits receipt plus catalog atomically. The GitHub Pages UI remains an offline-capable dated demo projection until a separately configured production endpoint exists.
 
 ## Verification
 
