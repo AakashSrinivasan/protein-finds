@@ -8,7 +8,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
 const artifactDir = path.join(root, 'review-artifacts');
 fs.mkdirSync(artifactDir, { recursive: true });
 
-async function assertShell(browserType, viewport, label, screenshot) {
+async function assertShell(browserType, viewport, label, screenshot, basketScreenshot) {
   const browser = await browserType.launch({ headless: true });
   const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
   const page = await context.newPage();
@@ -64,12 +64,22 @@ async function assertShell(browserType, viewport, label, screenshot) {
   }
   await page.evaluate(() => window.ProteinFinds.setDataState('ready'));
 
+  await page.fill('#search', '');
+  await page.locator('[data-product-id]').first().locator('[data-save]').click();
+  await page.locator('[data-product-id]').first().click();
+  await page.locator('[data-add]').click();
+  await page.locator('[data-tab="basket"]').click();
+  await page.waitForSelector('[data-screen="basket"] .basket-line');
+  assert.ok(await page.locator('[data-missing-categories]').isVisible(), `${label}: grocery trip shows non-medical missing-category prompts`);
+  assert.match(await page.locator('.basket-line').first().textContent(), /seeded \/ serving|price unknown/, `${label}: basket price remains source-honest`);
+  if (basketScreenshot) await page.screenshot({ path: path.join(artifactDir, basketScreenshot), fullPage: false });
+
   assert.deepEqual(errors, [], `${label}: no console or page errors`);
   await browser.close();
 }
 
 (async () => {
-  await assertShell(webkit, { width: 390, height: 844 }, 'WebKit portrait', 'first-viewport-portrait-390x844.png');
+  await assertShell(webkit, { width: 390, height: 844 }, 'WebKit portrait', 'first-viewport-portrait-390x844.png', 'grocery-loop-basket-390x844.png');
   await assertShell(webkit, { width: 844, height: 390 }, 'WebKit landscape', 'first-viewport-landscape-844x390.png');
   await assertShell(chromium, { width: 390, height: 844 }, 'Chromium standalone contract');
   console.log('PASS: focused app shell, licensed exact imagery, routes, Back/scroll restoration, states, 44px targets, portrait/landscape WebKit, overflow, and console checks');

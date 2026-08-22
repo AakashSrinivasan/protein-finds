@@ -36,9 +36,9 @@ async function auditAxe(page, name, axeSource) {
   assert.ok(await page.locator('[data-product-id]').first().boundingBox().then(box => box && box.y < 844));
   pass('first-viewport-product', 'search and an exact licensed product are visible at 390×844');
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(element => getComputedStyle(element).position), 'fixed');
-  pass('persistent-bottom-navigation', 'four focused tab destinations remain fixed');
+  pass('persistent-bottom-navigation', 'three focused grocery-loop destinations remain fixed');
 
-  for (const tab of ['discover', 'saved', 'planner', 'basket']) {
+  for (const tab of ['discover', 'saved', 'basket']) {
     await page.locator(`[data-tab="${tab}"]`).click();
     await page.waitForSelector(`[data-screen="${tab}"]:visible`);
     assert.equal(await page.locator('[data-screen]:visible').count(), 1, `${tab} renders one focused screen`);
