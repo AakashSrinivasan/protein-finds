@@ -4,7 +4,8 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "node --test catalog-contract.test.js catalog-import.test.js && node test-platform.js",
+    "test": "node --test catalog-contract.test.js catalog-import.test.js ask-protein.test.js && node test-platform.js",
+    "test:ask": "node --test ask-protein.test.js",
     "test:contract": "node --test catalog-contract.test.js",
     "test:import": "node --test catalog-import.test.js",
     "test:shell": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node mobile-shell-test.js",

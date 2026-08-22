@@ -27,6 +27,9 @@ const assert = require('node:assert/strict');
   const image = page.locator('[data-product-image]').first();
   assert.ok(await image.evaluate(element => element.complete && element.naturalWidth > 0), 'an exact package image is cached offline');
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(element => getComputedStyle(element).position), 'fixed', 'standalone navigation remains app-like offline');
+  await page.locator('[data-tab="ask"]').click();
+  await page.locator('[data-ask-prompt="best protein cereal"]').click();
+  assert.equal(await page.locator('[data-ask-product-id="magic-spoon"]').count(), 1, 'deterministic Ask engine works from the offline shell');
   assert.deepEqual(errors, [], 'zero PWA console/page errors');
 
   await browser.close();
