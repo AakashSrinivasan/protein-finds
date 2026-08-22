@@ -1,0 +1,17 @@
+{
+  "name": "Protein Finds",
+  "short_name": "Protein Finds",
+  "description": "Find, compare, and plan a vegetarian protein grocery trip.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+
+  "background_color": "#f4f1e7",
+  "theme_color": "#13251c",
+  "categories": ["food", "health", "shopping"],
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
