@@ -113,20 +113,33 @@ The fixtures cover the issue contract without claiming live truth:
 
 Cooked lentils provide a second whole-food example used to exercise sourced nutrition structure. `mediaAssets` is intentionally empty because no exact licensed fixture image has been verified; tests prove the valid first-class asset path without publishing a false image claim.
 
-## Import and migration boundary
+## Staged import and migration boundary
 
 The current `data.js` array remains the legacy UI fixture until a downstream consumer ticket migrates the screen. It mixes product identity with demo values and must not be imported as verified V0 data.
 
-A future importer must:
+`catalog-import.js` implements the deterministic CSV/JSON staging boundary. It accepts an immutable canonical catalog, explicit source metadata, an explicit import timestamp, and a positive freshness policy. It returns a versioned receipt with every raw row, its normalized form, a candidate, machine-readable reasons, and one disposition: `accepted`, `rejected`, or `needs-review`. Staging never mutates the canonical input.
 
-1. normalize product identity without inventing UPC, package, variant, or preparation fields;
-2. create or match stores and sources independently;
-3. append one field-specific known/unknown observation per sourced field and timestamp;
-4. validate the complete candidate catalog before persistence;
-5. preserve existing observations;
-6. create reciprocal conflicts rather than choosing the newest or most convenient value;
-7. create media assets only for retrievable, hashed, licensed, source-backed exact-package imagery;
-8. project observations into UI view models only through explicit conflict, freshness, store, and currency admission policy.
+The importer and accepted-only application boundary:
+
+1. normalizes product identity without inventing UPC, package, variant, or preparation fields;
+2. matches canonical stores and sources independently and routes mismatched source definitions to review;
+3. creates one field-specific unverified observation candidate per sourced field and timestamp;
+4. validates required fields, allowed package/serving units, diet/allergen flags, conservative per-serving nutrition bounds, stores, and strict UTC timestamps;
+5. preserves existing products and observations;
+6. routes duplicates, stale rows, metadata differences, and verified-value disagreements to review rather than choosing a winner;
+7. leaves media assets at explicit `needed` states because this intake does not prove retrievable, hashed, licensed exact-package imagery;
+8. validates the complete accepted-only catalog candidate before returning it.
+
+### Operator review path
+
+1. Run `stageCatalogImport(...)` and persist its complete JSON receipt before any canonical write. The receipt is the audit record: `rawSource.raw` retains exact CSV record text (including quoted values), `rawSource.record` retains the parsed source row, and `source` retains batch provenance.
+2. Check `summary` and the grouped source-row IDs in `results.accepted`, `results.rejected`, and `results.needsReview`. Reasons are stable objects with `code`, `field`, and `message`.
+3. Correct rejected rows at the source and create a new import receipt. Do not edit a rejected candidate into the canonical catalog.
+4. Review each `needs-review` row against the raw row and cited canonical IDs. Duplicate identity, reused UPC with conflicting package identity, colliding source-row ID, stale observation, source-definition conflict, product-metadata conflict, generated-ID collision, duplicate observation ID, an existing open conflict, and any disagreement with a `source-backed` canonical observation all stop automatic application.
+5. Resolve reviewed values by creating the normal reciprocal catalog conflict/resolution records described above; never replace or delete the prior verified observation. A reviewed row is re-imported as a new batch rather than having its old receipt rewritten.
+6. Call `applyAcceptedImport(canonical, receipt)` only after retaining the receipt. It re-stages every retained raw record against the current canonical catalog, fails atomically if any originally accepted row now needs review or rejection, returns a new catalog, appends only rows accepted in both passes, keeps imported observations `unverified`, and validates the complete result before returning. Persist that returned catalog atomically in the storage layer.
+
+The sanitized contract fixture is `fixtures/vendor-catalog-sanitized.csv`. It deliberately contains one accepted row plus duplicate identities, a verified-value conflict, a bad package unit, a missing timestamp, and a stale row. It contains no private vendor data.
 
 There is intentionally no Supabase schema, remote persistence, broad API import, UI migration, or model-backed ranking in V0 of this contract.
 
@@ -134,6 +147,7 @@ There is intentionally no Supabase schema, remote persistence, broad API import,
 
 ```bash
 npm test
+npm run test:import
 ```
 
-The contract tests cover representative records, identity/observation separation, strict known/unknown payloads, package identity, exact media binding, conflict resolution, timestamp parsing, provenance-aware score admission, all six explanations, explicit-weight ranking, and adversarial malformed inputs.
+The contract tests cover representative records, identity/observation separation, strict known/unknown payloads, package identity, exact media binding, conflict resolution, timestamp parsing, provenance-aware score admission, all six explanations, explicit-weight ranking, and adversarial malformed inputs. Import tests cover quoted CSV, JSON, raw-row preservation, non-mutation, accepted-only application, duplicates, verified conflicts, bad units, partial rows, timestamps, stale rows, product/source metadata conflicts, implausible nutrition, and invalid diet/allergen flags.
