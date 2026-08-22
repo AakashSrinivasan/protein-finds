@@ -9,6 +9,17 @@ The canonical implementation queue lives in GitHub Issues. This file records dep
 - Installable GitHub Pages PWA with cached offline shell
 - Automated functional, accessibility, browser, and PWA checks
 
+## Checkpoint 0.5 — Mobile app-shell reset
+
+- Replace the landing-page information architecture while preserving useful data/scoring logic
+- Search or products in the first phone viewport; products reachable within two taps
+- Persistent bottom tabs with focused screens and independent scroll restoration
+- Back navigation, exact product deep links, and explicit empty/loading/error/stale states
+- Exact licensed product imagery recognizable on phone cards
+- Portrait and landscape WebKit QA, 44px touch targets, no horizontal overflow or console errors
+
+**Expert review:** frozen live mobile build, first-viewport screenshots, and exact acceptance-check evidence.
+
 ## Checkpoint 1 — Trusted catalog foundation
 
 - Versioned product/store/source schema

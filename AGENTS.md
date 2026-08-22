@@ -38,6 +38,22 @@ git diff --check
 
 Run browser checks against both the local server and the deployed GitHub Pages URL when changing user-visible behavior, the manifest, service worker, or deployment paths.
 
+## V0 mobile-app shell
+
+The current landing-page composition is provisional. Preserve working data/scoring logic, but implement V0 as a real mobile app shell:
+
+- Search or products appear in the first phone viewport.
+- Any product is reachable within two taps.
+- No single endless webpage composition.
+- Persistent bottom navigation; each tab is a focused screen with independent scroll state.
+- Browser Back restores the prior view and filters.
+- Exact product deep links work.
+- Product imagery stays recognizable at phone-card size.
+- Empty, loading, error, offline, and stale-data states are explicit.
+- Portrait and landscape WebKit paths have no horizontal overflow or console errors.
+- Interactive touch targets are at least 44px.
+- Installed standalone mode feels app-like before any Expo/App Store packaging.
+
 ## V0 boundaries
 
 Prioritize:
