@@ -4,17 +4,23 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "node --test catalog-contract.test.js catalog-import.test.js && node test-platform.js",
+    "test": "node --test catalog-contract.test.js catalog-import.test.js backend.test.js && node test-platform.js",
     "test:contract": "node --test catalog-contract.test.js",
     "test:import": "node --test catalog-import.test.js",
+    "test:backend": "node --test backend.test.js",
     "test:shell": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node mobile-shell-test.js",
     "verify": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node review-test.js",
     "test:pwa": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node pwa-test.js",
-    "serve": "python3 -m http.server 4173"
+    "serve": "python3 -m http.server 4173",
+    "backend:serve": "node backend/index.js",
+    "backend:migrate": "node backend/migrate.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "devDependencies": {
     "axe-core": "4.13.0",
     "playwright": "^1.62.1"

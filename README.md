@@ -33,3 +33,5 @@ npm run verify
 All product, price, ingredient, and availability records are seeded prototype data. They demonstrate discovery, filtering, comparison, saves, basket planning, and source handoffs; they are not current inventory or individualized medical advice.
 
 The versioned catalog/provenance contract and its migration boundary are documented in [`DATA.md`](DATA.md). Deterministic CSV/JSON staging, conflict routing, and accepted-only application live in [`catalog-import.js`](catalog-import.js); the sanitized vendor example is [`fixtures/vendor-catalog-sanitized.csv`](fixtures/vendor-catalog-sanitized.csv).
+
+The optional durable, zero-SDK SQLite/API boundary is documented in [`BACKEND.md`](BACKEND.md). The hosted PWA still uses its cached, dated demo snapshot; no live price or inventory claim is introduced by the backend.
