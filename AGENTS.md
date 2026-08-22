@@ -47,6 +47,7 @@ Prioritize:
 - protein, calories, price, dietary fit, source, and verification state;
 - one metro/ZIP and curated high-interest products;
 - vendor CSV/Google Sheets intake with human review;
+- exact package imagery tied to variant, size, and UPC, with explicit `image needed` states instead of generic or unlicensed substitutes;
 - Ask Protein as a catalog-grounded query and basket-improvement layer.
 
 Defer until the core loop proves useful:

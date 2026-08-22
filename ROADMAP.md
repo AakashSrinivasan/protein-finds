@@ -14,6 +14,7 @@ The canonical implementation queue lives in GitHub Issues. This file records dep
 - Versioned product/store/source schema
 - Deterministic scoring fields and explanation contract
 - Import staging, validation, conflict review, and provenance
+- Exact front-package, nutrition-label, and ingredient-image contracts with variant/size/UPC identity and licensing provenance
 - Seed expansion using source-backed grocery records
 
 **Expert review:** product/data architecture and sample records.
