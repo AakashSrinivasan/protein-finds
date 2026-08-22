@@ -1,9 +1,9 @@
 'use strict';
 
 const imageContract = () => ({
-  front: {status: 'needed', sourceId: null, license: null, exactPackage: null},
-  nutrition: {status: 'needed', sourceId: null, license: null, exactPackage: null},
-  ingredients: {status: 'needed', sourceId: null, license: null, exactPackage: null}
+  front: {status: 'needed', reasonMissing: 'No exact-package front image is licensed and verified.'},
+  nutrition: {status: 'needed', reasonMissing: 'No exact-package nutrition panel image is licensed and verified.'},
+  ingredients: {status: 'needed', reasonMissing: 'No exact-package ingredient panel image is licensed and verified.'}
 });
 
 module.exports = {
@@ -19,6 +19,7 @@ module.exports = {
       markets: ['mainstream-grocery'],
       identity: {brand: 'Nasoya', variant: 'Organic Extra Firm', packageSize: {value: 14, unit: 'oz'}, upc: null},
       dietaryTags: ['vegetarian', 'vegan', 'gluten-free', 'soy'],
+      preparationMinutes: null,
       images: imageContract()
     },
     {
@@ -29,6 +30,7 @@ module.exports = {
       markets: ['mainstream-grocery'],
       identity: {brand: null, variant: 'generic cooked food', packageSize: null, upc: null},
       dietaryTags: ['vegetarian', 'vegan', 'gluten-free', 'legume'],
+      preparationMinutes: null,
       images: imageContract()
     },
     {
@@ -39,6 +41,7 @@ module.exports = {
       markets: ['indian-grocery'],
       identity: {brand: 'Deep', variant: null, packageSize: {value: 12, unit: 'oz'}, upc: null},
       dietaryTags: ['vegetarian', 'dairy'],
+      preparationMinutes: null,
       images: imageContract()
     },
     {
@@ -49,6 +52,7 @@ module.exports = {
       markets: ['mainstream-grocery'],
       identity: {brand: null, variant: 'generic raw produce', packageSize: null, upc: null},
       dietaryTags: ['vegetarian', 'vegan', 'gluten-free', 'produce'],
+      preparationMinutes: null,
       images: imageContract()
     }
   ],
@@ -110,33 +114,36 @@ module.exports = {
       accessedAt: '2026-08-13T12:20:00Z'
     }
   ],
+  mediaAssets: [],
   observations: [
     {
       id: 'obs-tofu-nutrition-manufacturer',
       productId: 'product-nasoya-extra-firm-tofu-14oz',
       storeId: null,
       field: 'nutrition',
-      value: {servingSize: {value: 85, unit: 'g'}, calories: 90, proteinG: 9, fiberG: 1, sodiumMg: 10},
+      value: {knowledge: 'known', servingSize: {value: 85, unit: 'g'}, calories: 90, proteinG: 9, fiberG: 1, sodiumMg: 10},
       sourceId: 'source-nasoya-product-page',
       observedAt: '2026-08-13T12:00:00Z',
-      verificationState: 'conflict'
+      verificationState: 'conflict',
+      conflictId: 'conflict-tofu-calories'
     },
     {
       id: 'obs-tofu-nutrition-retailer',
       productId: 'product-nasoya-extra-firm-tofu-14oz',
       storeId: 'store-target-sunnyvale',
       field: 'nutrition',
-      value: {servingSize: {value: 85, unit: 'g'}, calories: 80, proteinG: 9, fiberG: 1, sodiumMg: 10},
+      value: {knowledge: 'known', servingSize: {value: 85, unit: 'g'}, calories: 80, proteinG: 9, fiberG: 1, sodiumMg: 10},
       sourceId: 'source-target-search-tofu',
       observedAt: '2026-08-13T12:05:00Z',
-      verificationState: 'conflict'
+      verificationState: 'conflict',
+      conflictId: 'conflict-tofu-calories'
     },
     {
       id: 'obs-tofu-ingredients',
       productId: 'product-nasoya-extra-firm-tofu-14oz',
       storeId: null,
       field: 'ingredients',
-      value: {text: null, normalized: null, reasonUnknown: 'Exact current package panel was not captured.'},
+      value: {knowledge: 'unknown', reasonUnknown: 'Exact current package panel was not captured.'},
       sourceId: 'source-nasoya-product-page',
       observedAt: '2026-08-13T12:00:00Z',
       verificationState: 'unverified'
@@ -146,7 +153,7 @@ module.exports = {
       productId: 'product-nasoya-extra-firm-tofu-14oz',
       storeId: 'store-target-sunnyvale',
       field: 'price',
-      value: {amount: 2.49, currency: 'USD'},
+      value: {knowledge: 'known', amount: 2.49, currency: 'USD'},
       sourceId: 'source-target-search-tofu',
       observedAt: '2026-08-13T12:05:00Z',
       verificationState: 'unverified'
@@ -156,7 +163,7 @@ module.exports = {
       productId: 'product-nasoya-extra-firm-tofu-14oz',
       storeId: 'store-target-sunnyvale',
       field: 'availability',
-      value: {status: 'unknown', reasonUnknown: 'Search result did not prove location-level stock.'},
+      value: {knowledge: 'unknown', reasonUnknown: 'Search result did not prove location-level stock.'},
       sourceId: 'source-target-search-tofu',
       observedAt: '2026-08-13T12:05:00Z',
       verificationState: 'unverified'
@@ -166,7 +173,7 @@ module.exports = {
       productId: 'product-lentils-cooked-generic',
       storeId: null,
       field: 'nutrition',
-      value: {servingSize: {value: 100, unit: 'g'}, calories: 116, proteinG: 9.02, fiberG: 7.9, sodiumMg: 2},
+      value: {knowledge: 'known', servingSize: {value: 100, unit: 'g'}, calories: 116, proteinG: 9.02, fiberG: 7.9, sodiumMg: 2},
       sourceId: 'source-usda-lentils-search',
       observedAt: '2026-08-13T12:10:00Z',
       verificationState: 'unverified'
@@ -176,7 +183,7 @@ module.exports = {
       productId: 'product-deep-paneer-12oz',
       storeId: 'store-indian-grocery-demo',
       field: 'ingredients',
-      value: {text: null, normalized: null, reasonUnknown: 'No exact-package ingredient image is licensed or verified.'},
+      value: {knowledge: 'unknown', reasonUnknown: 'No exact-package ingredient image is licensed or verified.'},
       sourceId: 'source-deep-paneer-search',
       observedAt: '2026-08-13T12:15:00Z',
       verificationState: 'unverified'
@@ -186,7 +193,7 @@ module.exports = {
       productId: 'product-broccoli-raw-generic',
       storeId: null,
       field: 'nutrition',
-      value: {servingSize: {value: 100, unit: 'g'}, calories: 34, proteinG: 2.82, fiberG: 2.6, sodiumMg: 33},
+      value: {knowledge: 'known', servingSize: {value: 100, unit: 'g'}, calories: 34, proteinG: 2.82, fiberG: 2.6, sodiumMg: 33},
       sourceId: 'source-usda-broccoli-search',
       observedAt: '2026-08-13T12:20:00Z',
       verificationState: 'unverified'
