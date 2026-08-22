@@ -1,0 +1,2 @@
+.install-btn{border:1px solid var(--ink);border-radius:10px;background:transparent;padding:9px 12px;font-weight:800;cursor:pointer}.install-btn:disabled{opacity:.65;cursor:default}.install-steps{display:grid;gap:8px}.install-steps p{margin:0;padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
+@media(max-width:620px){.install-btn{min-height:44px;padding:8px 10px}.topbar .brand>span:last-child{display:none}.topbar nav{gap:6px}}

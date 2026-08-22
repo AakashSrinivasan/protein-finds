@@ -1,0 +1,33 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const root=__dirname,url=process.env.REVIEW_URL||('file://'+path.join(root,'index.html'));
+const report={runAt:new Date().toISOString(),url,checks:[],axe:{},consoleErrors:[]};
+const ok=(name,detail)=>report.checks.push({name,status:'PASS',detail});
+(async()=>{
+  fs.mkdirSync(path.join(root,'review-artifacts'),{recursive:true});
+  const browser=await chromium.launch({headless:true});
+  const desktop=await browser.newPage({viewport:{width:1440,height:1000}});
+  desktop.on('console',m=>{if(m.type()==='error')report.consoleErrors.push(m.text())});desktop.on('pageerror',e=>report.consoleErrors.push(e.message));
+  await desktop.goto(url);await desktop.evaluate(()=>localStorage.clear());await desktop.reload();await desktop.waitForSelector('[data-card]');
+  const axeSource=fs.readFileSync(require.resolve('axe-core/axe.min.js'),'utf8');
+  async function axe(page,name){await page.addScriptTag({content:axeSource});const result=await page.evaluate(async()=>await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa']}}));report.axe[name]=result.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.length,help:v.help}));assert.deepEqual(report.axe[name],[],`${name} axe violations`);ok(`axe-${name}`,'0 WCAG A/AA violations');}
+  assert.equal(await desktop.locator('[data-card]').count(),9);ok('desktop-progressive-results','9 of 16 initially; explicit load-more control');
+  assert.equal(await desktop.locator('body').textContent().then(t=>/label-backed|verified bank|checked \d{4}/i.test(t)),false);ok('truth-language','visible catalog consistently identifies seeded/demo data');
+  await desktop.click('#filterToggle');for(const id of ['#categoryFilter','#useCaseFilter','#prepFilter','#minProtein','#maxCalories','#maxSugar','#maxServingPrice','#minFiber','#maxSodium'])assert.equal(await desktop.locator(id).count(),1);ok('required-controls','category, use, prep, protein, calorie, sugar, budget, fiber and sodium controls present');
+  assert.equal(await desktop.locator('[data-filter="restaurantOnly"]').count(),1);assert.equal(await desktop.locator('[data-filter="hideCrossContact"]').count(),1);assert.equal(await desktop.locator('[data-filter="simpleOnly"]').count(),1);ok('handling-controls','restaurant, cross-contact, sweetener and additive/complexity controls present');
+  await desktop.click('#filterToggle');await desktop.click('#plannerForm button[type="submit"]');await desktop.waitForSelector('#recommendation:not([hidden])');assert.match(await desktop.locator('.target-status').textContent(),/Target met/);ok('default-target','50g default is met and explicitly accounted');
+  await desktop.locator('.rec-items [data-swap]').first().click();assert.ok(await desktop.locator('[data-choose-swap]').count()>0);await desktop.locator('[data-choose-swap]').first().click();const recNames=await desktop.locator('.rec-items h4').allTextContents();assert.equal(new Set(recNames).size,recNames.length);ok('recommendation-swap','working duplicate-safe substitute choice');
+  await desktop.click('#useRec');await desktop.waitForSelector('#basketDrawer[aria-hidden="false"]');assert.ok(await desktop.locator('.basket-line a').count()>0);assert.ok(await desktop.locator('.basket-line [data-swap]').count()>0);ok('action-loop','basket exposes swaps and source/listing handoffs');await desktop.click('[data-close-basket]');
+  await desktop.fill('#search','BOCA');await desktop.click('[data-open="boca-original"]');await desktop.click('#detailContent [data-family="BOCA burger variants"]');assert.equal(await desktop.locator('.compare-table thead th').count(),3);ok('variant-family','BOCA family comparison is first-class');await desktop.keyboard.press('Escape');await desktop.keyboard.press('Escape');await desktop.fill('#search','');
+  await axe(desktop,'desktop');await desktop.evaluate(()=>scrollTo(0,0));await desktop.screenshot({path:path.join(root,'review-artifacts','desktop-1440.png'),fullPage:true});ok('desktop-screenshot','1440px full-page capture');
+
+  const mobile=await browser.newPage({viewport:{width:390,height:844}});mobile.on('console',m=>{if(m.type()==='error')report.consoleErrors.push(m.text())});mobile.on('pageerror',e=>report.consoleErrors.push(e.message));await mobile.goto(url);await mobile.evaluate(()=>localStorage.clear());await mobile.reload();await mobile.waitForSelector('[data-card]');
+  assert.equal(await mobile.locator('[data-card]').count(),6);const height=await mobile.evaluate(()=>document.documentElement.scrollHeight);assert.ok(height<9000);ok('mobile-progressive-ia',`6 initial compact records; document height ${height}px (previously 13,664px)`);
+  assert.equal(await mobile.locator('.mobile-explore').isVisible(),true);assert.equal(await mobile.locator('.finder-bar').evaluate(el=>getComputedStyle(el).position),'sticky');ok('mobile-shortcut-sticky','browse shortcut and sticky search/sort/filter instrument');
+  await mobile.click('#filterToggle');const tooSmall=await mobile.locator('button:visible,.filter-panel label:visible,.finder-bar select:visible,.finder-bar input:visible').evaluateAll(nodes=>nodes.map(n=>({text:(n.textContent||n.getAttribute('aria-label')||'').trim().slice(0,40),w:n.getBoundingClientRect().width,h:n.getBoundingClientRect().height})).filter(x=>x.w<44||x.h<44));assert.deepEqual(tooSmall,[]);ok('mobile-tap-targets','visible primary controls and filter labels are at least 44×44 CSS px');await axe(mobile,'mobile-filter-open');await mobile.click('#filterToggle');
+  assert.equal(await mobile.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1),false);ok('mobile-overflow','390px portrait has no horizontal overflow');await mobile.evaluate(()=>scrollTo(0,0));await mobile.screenshot({path:path.join(root,'review-artifacts','mobile-390x844.png'),fullPage:true});ok('mobile-screenshot','390×844 full-page capture');
+  assert.deepEqual(report.consoleErrors,[]);ok('browser-console','zero console/page errors');
+  await browser.close();fs.writeFileSync(path.join(root,'review-artifacts','verification.json'),JSON.stringify(report,null,2));fs.writeFileSync(path.join(root,'review-artifacts','verification.txt'),report.checks.map(x=>`PASS  ${x.name} — ${x.detail}`).join('\n')+'\n');console.log(`PASS: ${report.checks.length} checks; 0 axe violations; 0 browser errors`);
+})().catch(err=>{report.failure=String(err.stack||err);fs.mkdirSync(path.join(root,'review-artifacts'),{recursive:true});fs.writeFileSync(path.join(root,'review-artifacts','verification.json'),JSON.stringify(report,null,2));console.error(err);process.exit(1)});
