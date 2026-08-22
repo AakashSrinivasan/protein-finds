@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="Find, compare, save, and plan a complete vegetarian protein grocery trip.">
+  <meta name="theme-color" content="#123d2d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Protein Finds">
+  <title>Protein Finds</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="app-shell.css">
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="#discover" aria-label="Protein Finds discover">
+      <span class="brand-mark" aria-hidden="true">PF</span>
+      <span><b>Protein Finds</b><small>Vegetarian grocery scout</small></span>
+    </a>
+    <button id="installButton" class="header-action" type="button" aria-label="Install Protein Finds">Install</button>
+  </header>
+
+  <main id="appMain" tabindex="-1"></main>
+  <div id="liveRegion" class="sr-only" aria-live="polite"></div>
+
+  <nav class="bottom-nav" data-bottom-nav aria-label="App tabs">
+    <a href="#discover" data-tab="discover"><span aria-hidden="true">⌕</span><b>Discover</b></a>
+    <a href="#saved" data-tab="saved"><span aria-hidden="true">♡</span><b>Saved</b><i id="savedCount">0</i></a>
+    <a href="#planner" data-tab="planner"><span aria-hidden="true">＋</span><b>Plan</b></a>
+    <a href="#basket" data-tab="basket"><span aria-hidden="true">▣</span><b>Basket</b><i id="basketCount">0</i></a>
+  </nav>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
