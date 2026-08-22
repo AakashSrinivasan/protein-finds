@@ -1,4 +1,5 @@
 const products = window.PROTEIN_PRODUCTS;
+const locationData = window.PROTEIN_LOCATION;
 const app = document.querySelector('#appMain');
 const liveRegion = document.querySelector('#liveRegion');
 const storageKey = 'protein-finds-shell-state-v1';
@@ -18,7 +19,14 @@ const state = {
   sort: stored.sort || 'recommended',
   dataState: navigator.onLine ? 'ready' : 'offline',
   scroll: readJson(sessionStorage, scrollKey, {}),
-  plannerResult: []
+  plannerResult: [],
+  locationStatus: 'idle',
+  locationMessage: '',
+  location: null,
+  mapCenter: null,
+  mapMoved: false,
+  locationView: 'list',
+  selectedStore: null
 };
 let currentRoute = null;
 let deferredInstallPrompt = null;
@@ -74,6 +82,7 @@ function imageMarkup(product, detail = false) {
 
 function productCard(product) {
   const saved = state.saved.has(product.id);
+  const nearby = nearestStoreForProduct(product);
   return `<article class="product-card" data-product-id="${product.id}">
     <div class="product-media">${imageMarkup(product)}</div>
     <div class="product-copy">
@@ -81,6 +90,7 @@ function productCard(product) {
       <h2><a class="product-link" href="#product/${product.id}">${product.name}</a></h2>
       <p class="brand-line">${product.brand} · ${product.category}</p>
       <div class="metrics"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div><b>${product.efficiency}</b><span>g/100 cal</span></div></div>
+      ${nearby ? `<p class="nearby-product">${nearby.name} · ${nearby.distanceMiles.toFixed(1)} mi · inventory not checked</p>` : ''}
       <p class="tradeoff">${product.tradeoff}</p>
     </div>
     <button class="save-button" type="button" data-save="${product.id}" aria-label="${saved ? 'Remove' : 'Save'} ${product.name}" aria-pressed="${saved}">${saved ? '♥' : '♡'}</button>
@@ -119,6 +129,72 @@ function filteredProducts() {
   return list.sort(sorters[state.sort]);
 }
 
+function nearbyStores() {
+  return state.location ? locationData.storesNear(state.location) : [];
+}
+
+function nearestStoreForProduct(product) {
+  if (!state.location) return null;
+  return nearbyStores().find(store => product.stores.includes(store.name)) || null;
+}
+
+function setLocation(center) {
+  state.location = { lat: center.lat, lon: center.lon, label: center.label };
+  state.mapCenter = { lat: center.lat, lon: center.lon };
+  state.mapMoved = false;
+  state.locationStatus = 'ready';
+  state.locationMessage = '';
+  state.selectedStore = null;
+  renderDiscover();
+}
+
+function storeCard(store) {
+  const selected = state.selectedStore === store.id;
+  return `<article class="store-card" data-store-card="${store.id}" ${selected ? 'data-selected="true"' : ''}>
+    <div><p class="store-distance">${store.distanceMiles.toFixed(1)} mi away</p><h3>${store.name}</h3><p>${store.address}</p></div>
+    <p class="availability-note"><b>Availability:</b> ${store.availabilityLabel} · checked ${store.availabilityObservedAt}</p>
+    <a href="${store.coordinateSourceUrl}" target="_blank" rel="noopener">Coordinate source</a>
+  </article>`;
+}
+
+function mapMarkup(stores) {
+  const center = state.mapCenter || state.location;
+  const markers = stores.map((store, index) => {
+    const point = locationData.projectStore(store, center);
+    return `<button class="map-marker" style="--x:${point.x}%;--y:${point.y}%" type="button" data-store-marker="${store.id}" aria-label="${store.name}, ${store.distanceMiles.toFixed(1)} miles away" aria-pressed="${state.selectedStore === store.id}"><span>${index + 1}</span></button>`;
+  }).join('');
+  const selected = stores.find(store => store.id === state.selectedStore);
+  return `<div class="map-wrap">
+    <div class="map-status"><span>Schematic, zero-tile map</span><b>${state.mapMoved ? 'Map moved · results unchanged' : 'Map and list synchronized'}</b></div>
+    <div class="store-map" data-store-map aria-label="Schematic map of ${stores.length} seeded store coordinates">
+      <span class="map-road road-one"></span><span class="map-road road-two"></span>${markers}
+      <div class="map-pan" aria-label="Move map center"><button type="button" data-map-pan="north" aria-label="Move map north">↑</button><div><button type="button" data-map-pan="west" aria-label="Move map west">←</button><button type="button" data-map-pan="east" aria-label="Move map east">→</button></div><button type="button" data-map-pan="south" aria-label="Move map south">↓</button></div>
+    </div>
+    <button class="primary search-here" type="button" data-search-here ${state.mapMoved ? '' : 'disabled'}>Search here</button>
+    <p class="map-fallback">No map-tile request or API key is required. If an external coordinate source is unavailable, this list and deterministic distance view remain usable.</p>
+    ${selected ? storeCard(selected) : ''}
+  </div>`;
+}
+
+function locationMarkup() {
+  const ready = state.locationStatus === 'ready' && state.location;
+  const stores = ready ? nearbyStores() : [];
+  const message = state.locationMessage ? `<p class="location-message" role="${state.locationStatus === 'searching' ? 'status' : 'alert'}">${state.locationMessage}</p>` : '';
+  return `<section class="location-card" data-location-status="${state.locationStatus}">
+    <div class="location-heading"><div><p class="eyebrow">Local grocery discovery</p><h2>Shop nearby</h2></div>${ready ? `<span>${state.location.label}</span>` : ''}</div>
+    <p class="location-truth">Use a supported ZIP or choose current location. Permission is requested only after you tap the button; exact device coordinates are not stored.</p>
+    <form id="locationForm" class="location-form">
+      <label for="zipInput">ZIP code</label><div><input id="zipInput" name="zip" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{5}(-[0-9]{4})?" placeholder="95113" aria-describedby="zipHelp"><button class="primary" type="submit">Find stores</button></div>
+      <small id="zipHelp">Demo coverage: 95113, 95129, and 95014.</small>
+    </form>
+    <button class="secondary current-location" type="button" data-use-location ${state.locationStatus === 'searching' ? 'disabled' : ''}>Use current location</button>
+    ${message}
+    ${ready ? `<div class="location-summary"><b>${stores.length} seeded stores by distance</b><span>Coordinates are fixtures; inventory is not checked.</span></div>
+      <div class="view-toggle" aria-label="Store results view"><button type="button" data-location-view="list" aria-pressed="${state.locationView === 'list'}">List</button><button type="button" data-location-view="map" aria-pressed="${state.locationView === 'map'}">Map</button></div>
+      <div class="store-results" data-store-results data-view="${state.locationView}">${state.locationView === 'map' ? mapMarkup(stores) : stores.map(storeCard).join('')}</div>` : ''}
+  </section>`;
+}
+
 function renderDiscover() {
   const list = filteredProducts();
   const categories = ['All', 'Plant meat', 'Dairy', 'Breakfast', 'Milk & shakes', 'Restaurant'];
@@ -130,6 +206,7 @@ function renderDiscover() {
   app.innerHTML = `<section class="screen" data-screen="discover">
     ${screenHead('Complete the grocery trip', 'Find protein worth a basket spot', 'Search the shelf, understand the trade-off, then save or plan.')}
     <div class="freshness">Demo records · seeded 2026-08-13 · not live price or inventory</div>
+    ${locationMarkup()}
     <div class="discovery-tools">
       <label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" value="${state.search.replaceAll('"', '&quot;')}" aria-label="Search products" placeholder="Search products"></label>
       <select id="sort" aria-label="Sort products"><option value="recommended">Best fit</option><option value="protein">Protein</option><option value="efficiency">Efficiency</option><option value="price">Cost / 25g</option></select>
@@ -233,6 +310,18 @@ document.addEventListener('change', event => {
 });
 
 document.addEventListener('submit', event => {
+  if (event.target.id === 'locationForm') {
+    event.preventDefault();
+    const center = locationData.findZipCenter(new FormData(event.target).get('zip'));
+    if (center) setLocation(center);
+    else {
+      state.locationStatus = 'denied';
+      state.locationMessage = 'That ZIP is outside this demo. Try 95113, 95129, or 95014.';
+      renderDiscover();
+      requestAnimationFrame(() => document.querySelector('#zipInput')?.focus());
+    }
+    return;
+  }
   if (event.target.id !== 'plannerForm') return;
   event.preventDefault();
   const form = new FormData(event.target);
@@ -259,6 +348,35 @@ document.addEventListener('click', event => {
   if (category) { state.category = category.dataset.category; persist(); renderDiscover(); return; }
   const stateAction = event.target.closest('[data-state-action]');
   if (stateAction) { state.dataState = navigator.onLine ? 'ready' : 'offline'; renderDiscover(); return; }
+  const useLocation = event.target.closest('[data-use-location]');
+  if (useLocation) {
+    if (!navigator.geolocation) {
+      state.locationStatus = 'denied'; state.locationMessage = 'Location is unavailable. Enter a ZIP instead.'; renderDiscover(); return;
+    }
+    state.locationStatus = 'searching'; state.locationMessage = 'Waiting for location permission…'; renderDiscover();
+    navigator.geolocation.getCurrentPosition(
+      position => setLocation({ lat: position.coords.latitude, lon: position.coords.longitude, label: 'Current location' }),
+      () => {
+        state.locationStatus = 'denied'; state.locationMessage = 'Location was not shared. Enter a ZIP to keep browsing.'; renderDiscover();
+        requestAnimationFrame(() => document.querySelector('#zipInput')?.focus());
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+    );
+    return;
+  }
+  const view = event.target.closest('[data-location-view]');
+  if (view) { state.locationView = view.dataset.locationView; renderDiscover(); return; }
+  const marker = event.target.closest('[data-store-marker]');
+  if (marker) { state.selectedStore = marker.dataset.storeMarker; renderDiscover(); return; }
+  const pan = event.target.closest('[data-map-pan]');
+  if (pan) {
+    const moves = { north: [0.01, 0], south: [-0.01, 0], east: [0, 0.01], west: [0, -0.01] };
+    const [lat, lon] = moves[pan.dataset.mapPan];
+    state.mapCenter = { lat: state.mapCenter.lat + lat, lon: state.mapCenter.lon + lon };
+    state.mapMoved = true; renderDiscover(); return;
+  }
+  const searchHere = event.target.closest('[data-search-here]');
+  if (searchHere) { setLocation({ ...state.mapCenter, label: 'Searched map area' }); return; }
   const usePlan = event.target.closest('[data-use-plan]');
   if (usePlan) { state.basket = [...new Set([...state.basket, ...state.plannerResult.map(product => product.id)])]; persist(); navigate('#basket'); return; }
   const card = event.target.closest('[data-product-id]');
@@ -284,6 +402,6 @@ render();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./service-worker.js').catch(() => {});
 
 window.ProteinFinds = {
-  products, state, scoreProduct, filteredProducts, buildPlan,
+  products, state, scoreProduct, filteredProducts, buildPlan, nearbyStores,
   setDataState(value) { state.dataState = value; if (currentRoute?.name !== 'discover') navigate('#discover'); else renderDiscover(); }
 };
