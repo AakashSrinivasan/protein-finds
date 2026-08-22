@@ -149,7 +149,9 @@ h1, h2, h3 { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-se
 @media (orientation: landscape) and (max-height: 500px) {
   .app-header { min-height: 54px; padding-top: 5px; padding-bottom: 5px; }
   .brand-mark { width: 44px; height: 44px; }
-  .brand small, .freshness { display: none; }
+  .brand small { display: none; }
+  .freshness { margin: 4px 0 6px; padding: 4px 8px; overflow: hidden; font-size: 10px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+  .freshness::before { flex: 0 0 6px; width: 6px; height: 6px; }
   #appMain { padding-top: 8px; padding-bottom: 78px; }
   .screen-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 7px; }
   .screen-head h1 { margin-bottom: 0; font-size: 24px; }

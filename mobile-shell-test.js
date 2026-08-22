@@ -23,6 +23,7 @@ async function assertShell(browserType, viewport, label, screenshot) {
   assert.equal(await page.locator('[data-screen]:visible').count(), 1, `${label}: one focused screen`);
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(el => getComputedStyle(el).position), 'fixed', `${label}: bottom nav stays fixed`);
   assert.ok(await page.locator('[data-product-id]').first().boundingBox().then(box => box && box.y < viewport.height), `${label}: product is in first viewport`);
+  assert.ok(await page.locator('.freshness').isVisible(), `${label}: demo/not-live data status remains visible`);
   const firstImage = page.locator('[data-product-id]').first().locator('[data-product-image]');
   assert.equal(await firstImage.getAttribute('data-image-license'), 'CC BY-SA 3.0', `${label}: first card uses licensed exact package image`);
   assert.ok(await firstImage.getAttribute('data-upc'), `${label}: visible image is tied to a UPC`);
