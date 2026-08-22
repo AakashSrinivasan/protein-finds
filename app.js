@@ -1,4 +1,6 @@
 const products = window.PROTEIN_PRODUCTS;
+const groceryProducts = products.filter(product => product.category !== 'Restaurant');
+const groceryIds = new Set(groceryProducts.map(product => product.id));
 const app = document.querySelector('#appMain');
 const liveRegion = document.querySelector('#liveRegion');
 const storageKey = 'protein-finds-shell-state-v1';
@@ -10,22 +12,33 @@ function readJson(storage, key, fallback) {
 }
 
 const stored = readJson(localStorage, storageKey, {});
+const categoryFilters = {
+  'All groceries': null,
+  'Main proteins': ['Plant meat', 'Egg'],
+  'Dairy & drinks': ['Dairy', 'Milk & shakes'],
+  'Breakfast': ['Breakfast', 'Wraps & breads'],
+  'Snacks': ['Snack']
+};
+const storedCategory = stored.category === 'All' ? 'All groceries' : stored.category;
 const state = {
-  saved: new Set(stored.saved || []),
-  basket: stored.basket || [],
+  saved: new Set((stored.saved || []).filter(id => groceryIds.has(id))),
+  basket: (stored.basket || []).filter(id => groceryIds.has(id)),
   search: stored.search || '',
-  category: stored.category || 'All',
+  category: Object.hasOwn(categoryFilters, storedCategory) ? storedCategory : 'All groceries',
   sort: stored.sort || 'recommended',
   dataState: navigator.onLine ? 'ready' : 'offline',
-  scroll: readJson(sessionStorage, scrollKey, {}),
-  plannerResult: []
+  scroll: readJson(sessionStorage, scrollKey, {})
 };
 let currentRoute = null;
 let deferredInstallPrompt = null;
 
 const money = value => `$${Number(value).toFixed(2)}`;
-const byId = id => products.find(product => product.id === id);
-const scoreProduct = product => product.efficiency * 5 + product.protein * 1.5 - product.pricePer25 + (product.role === 'anchor' ? 12 : 0);
+const byId = id => groceryProducts.find(product => product.id === id);
+const hasKnownPrice = product => product.availability !== 'demo-unavailable' && Number.isFinite(product.price);
+const priceLabel = product => hasKnownPrice(product) ? `${money(product.price)} demo pack` : 'Price unknown';
+const productVerdict = product => product.role === 'anchor' ? 'Strong main protein' : 'Useful supporting pick';
+const rankingReason = product => `${product.protein}g protein / ${product.calories} cal.`;
+const scoreProduct = product => product.efficiency * 5 + product.protein * 1.5 - (hasKnownPrice(product) ? product.pricePer25 : 0) + (product.role === 'anchor' ? 12 : 0);
 const routeKey = route => route.name === 'product' ? `product/${route.id}` : route.name;
 
 function persist() {
@@ -48,7 +61,7 @@ function updateCounts() {
 function parseRoute() {
   const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (hash.startsWith('product/')) return { name: 'product', id: hash.slice(8) };
-  return { name: ['discover', 'saved', 'planner', 'basket'].includes(hash) ? hash : 'discover' };
+  return { name: ['discover', 'saved', 'basket'].includes(hash) ? hash : 'discover' };
 }
 
 function saveScroll() {
@@ -77,11 +90,12 @@ function productCard(product) {
   return `<article class="product-card" data-product-id="${product.id}">
     <div class="product-media">${imageMarkup(product)}</div>
     <div class="product-copy">
-      <span class="role-pill">${product.role === 'halo' ? 'protein halo' : product.role}</span>
+      <p class="decision-verdict"><b>${productVerdict(product)}</b><span>Why it ranks: ${rankingReason(product)}</span></p>
       <h2><a class="product-link" href="#product/${product.id}">${product.name}</a></h2>
       <p class="brand-line">${product.brand} · ${product.category}</p>
-      <div class="metrics"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div><b>${product.efficiency}</b><span>g/100 cal</span></div></div>
-      <p class="tradeoff">${product.tradeoff}</p>
+      <div class="metrics"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div></div>
+      <div class="decision-grid"><span class="decision-price">${priceLabel(product)}</span><span class="decision-store">${product.stores[0] || 'Store unknown'}</span></div>
+      <p class="decision-freshness">${product.availabilityLabel} · checked Aug 13</p>
     </div>
     <button class="save-button" type="button" data-save="${product.id}" aria-label="${saved ? 'Remove' : 'Save'} ${product.name}" aria-pressed="${saved}">${saved ? '♥' : '♡'}</button>
   </article>`;
@@ -106,22 +120,23 @@ function stateMarkup(kind) {
 
 function filteredProducts() {
   const query = state.search.trim().toLowerCase();
-  let list = products.filter(product => {
+  const categories = categoryFilters[state.category];
+  let list = groceryProducts.filter(product => {
     const haystack = [product.name, product.brand, product.category, product.base, product.use, product.blurb].join(' ').toLowerCase();
-    return (!query || haystack.includes(query)) && (state.category === 'All' || product.category === state.category);
+    return (!query || haystack.includes(query)) && (!categories || categories.includes(product.category));
   });
   const sorters = {
     recommended: (a, b) => Number(Boolean(b.image)) - Number(Boolean(a.image)) || scoreProduct(b) - scoreProduct(a),
     protein: (a, b) => b.protein - a.protein,
     efficiency: (a, b) => b.efficiency - a.efficiency,
-    price: (a, b) => a.pricePer25 - b.pricePer25
+    price: (a, b) => Number(!hasKnownPrice(a)) - Number(!hasKnownPrice(b)) || a.pricePer25 - b.pricePer25
   };
   return list.sort(sorters[state.sort]);
 }
 
 function renderDiscover() {
   const list = filteredProducts();
-  const categories = ['All', 'Plant meat', 'Dairy', 'Breakfast', 'Milk & shakes', 'Restaurant'];
+  const categories = Object.keys(categoryFilters);
   const forcedState = state.dataState;
   let content;
   if (['loading', 'error'].includes(forcedState)) content = stateMarkup(forcedState);
@@ -132,7 +147,7 @@ function renderDiscover() {
     <div class="freshness">Demo records · seeded 2026-08-13 · not live price or inventory</div>
     <div class="discovery-tools">
       <label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" value="${state.search.replaceAll('"', '&quot;')}" aria-label="Search products" placeholder="Search products"></label>
-      <select id="sort" aria-label="Sort products"><option value="recommended">Best fit</option><option value="protein">Protein</option><option value="efficiency">Efficiency</option><option value="price">Cost / 25g</option></select>
+      <select id="sort" aria-label="Sort products"><option value="recommended">Best fit</option><option value="protein">Protein</option><option value="efficiency">Efficiency</option><option value="price">Seed price</option></select>
     </div>
     <div class="category-row" aria-label="Product categories">${categories.map(category => `<button type="button" data-category="${category}" aria-pressed="${state.category === category}">${category}</button>`).join('')}</div>
     <div id="catalogState">${content}</div>
@@ -141,7 +156,7 @@ function renderDiscover() {
 }
 
 function renderSaved() {
-  const saved = products.filter(product => state.saved.has(product.id));
+  const saved = groceryProducts.filter(product => state.saved.has(product.id));
   app.innerHTML = `<section class="screen" data-screen="saved">${screenHead('Your shortlist', 'Saved finds', 'Keep exact products close while you build the trip.')}${saved.length ? `<div class="product-list">${saved.map(productCard).join('')}</div>` : `<div class="empty-card"><span class="state-icon">♡</span><h2>No saved products</h2><p>Save a shelf-worthy option from Discover. It will stay on this device.</p><a class="primary" href="#discover">Browse products</a></div>`}</section>`;
 }
 
@@ -158,50 +173,39 @@ function renderProduct(id) {
     <article class="detail-card">
       <div class="detail-image">${imageMarkup(product, true)}</div>
       <div class="detail-body">
-        <span class="role-pill">${product.role}</span><h1 id="screenTitle">${product.name}</h1><p class="brand-line">${product.brand} · ${product.category} · ${product.base}</p>
+        <p class="detail-verdict"><b>${productVerdict(product)}</b><span>Why it ranks: ${rankingReason(product)}</span></p><h1 id="screenTitle">${product.name}</h1><p class="brand-line">${product.brand} · ${product.category} · ${product.base}</p>
         <div class="detail-metrics"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div><b>${product.efficiency}</b><span>g / 100 cal</span></div></div>
+        <div class="detail-decision"><span><b>${priceLabel(product)}</b><small>not a live price</small></span><span><b>${product.stores[0] || 'Store unknown'}</b><small>${product.availabilityLabel} · checked Aug 13</small></span></div>
         <p>${product.blurb}</p><p><b>Best use:</b> ${product.use}</p><p><b>Trade-off:</b> ${product.tradeoff}</p>
         <div class="truth-note"><b>Seeded demo record.</b> Nutrition, price and availability are not a current exact-SKU claim. Verify the linked current source before buying.</div>
-        <div class="detail-actions"><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save product'}</button><button class="primary" type="button" data-add="${product.id}">${state.basket.includes(product.id) ? 'In basket' : 'Add to basket'}</button><a class="secondary" target="_blank" rel="noopener" href="${product.source}">Open source</a><a class="secondary" href="#planner">Plan with this</a></div>
+        <div class="detail-actions"><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save product'}</button><button class="primary" type="button" data-add="${product.id}">${state.basket.includes(product.id) ? 'In basket' : 'Add to basket'}</button><a class="secondary" target="_blank" rel="noopener" href="${product.source}">Open source</a><a class="secondary" href="#basket">View basket</a></div>
         ${imageCredit}
       </div>
     </article>
   </section>`;
 }
 
-function buildPlan(target, priority) {
-  const available = products.filter(product => product.availability !== 'demo-unavailable').sort((a, b) => {
-    if (priority === 'price') return a.pricePer25 - b.pricePer25;
-    if (priority === 'convenience') return Number(b.prep === 'Ready now') - Number(a.prep === 'Ready now') || scoreProduct(b) - scoreProduct(a);
-    return scoreProduct(b) - scoreProduct(a);
-  });
-  const result = [];
-  for (const product of available) {
-    if (result.reduce((sum, item) => sum + item.protein, 0) >= target || result.length >= 5) break;
-    if (!result.some(item => item.brand === product.brand)) result.push(product);
-  }
-  return result;
-}
-
-function renderPlanner() {
-  const result = state.plannerResult;
-  const total = result.reduce((sum, product) => sum + product.protein, 0);
-  app.innerHTML = `<section class="screen" data-screen="planner">${screenHead('Deterministic basket builder', 'Plan the protein gap', 'Pick a target. The demo ranks only catalog products and shows its arithmetic.')}
-    <form id="plannerForm" class="planner-form">
-      <div class="form-card"><div class="range-output"><label for="target">Protein target</label><output id="targetOutput">50g</output></div><input id="target" name="target" type="range" min="20" max="100" step="5" value="50"></div>
-      <div class="form-card"><label for="priority">What should win?</label><select id="priority" name="priority"><option value="balanced">Practical balance</option><option value="price">Lowest seed cost / 25g</option><option value="convenience">Ready-now convenience</option></select></div>
-      <button class="primary" type="submit">Build a demo basket</button>
-    </form>
-    ${result.length ? `<div class="plan-result" aria-live="polite"><h2>${result.length} products · ${total}g protein</h2><p>${total >= 50 ? 'Default target met.' : 'The current constraints leave a shortfall.'} Values remain seeded demos.</p>${result.map(product => `<p><b>${product.name}</b> · ${product.protein}g</p>`).join('')}<button class="primary" type="button" data-use-plan>Use this basket</button></div>` : ''}
-  </section>`;
-}
-
 function renderBasket() {
   const items = state.basket.map(byId).filter(Boolean);
   const totalProtein = items.reduce((sum, product) => sum + product.protein, 0);
-  const totalCost = items.reduce((sum, product) => sum + product.price / product.servings, 0);
+  const knownPriceItems = items.filter(hasKnownPrice);
+  const totalCost = knownPriceItems.reduce((sum, product) => sum + product.price / product.servings, 0);
+  const unknownPriceCount = items.length - knownPriceItems.length;
   const groups = Object.groupBy ? Object.groupBy(items, product => product.stores[0] || 'Source') : items.reduce((result, product) => { const key = product.stores[0] || 'Source'; (result[key] ||= []).push(product); return result; }, {});
-  app.innerHTML = `<section class="screen" data-screen="basket">${screenHead('Store-grouped trip', 'Planning basket', 'One grocery trip view. Prices and inventory still require a current check.')}${items.length ? `${Object.entries(groups).map(([store, storeItems]) => `<section><h2>${store}</h2>${storeItems.map(product => `<div class="basket-line"><div><b>${product.name}</b><small>${product.protein}g · ~${money(product.price / product.servings)} / serving</small></div><button type="button" data-remove="${product.id}" aria-label="Remove ${product.name}">Remove</button></div>`).join('')}</section>`).join('')}<div class="basket-total"><span>Seeded one-serving total</span><br><b>${totalProtein}g · ${money(totalCost)}</b><p>No order or payment is submitted.</p></div>` : `<div class="empty-card"><span class="state-icon">▣</span><h2>Your basket is empty</h2><p>Add a product directly or build a deterministic plan.</p><a class="primary" href="#discover">Find products</a></div>`}</section>`;
+  const tripCategories = [
+    {label: 'a main protein', categories: ['Plant meat', 'Egg']},
+    {label: 'a breakfast option', categories: ['Breakfast', 'Wraps & breads']},
+    {label: 'dairy or a drink', categories: ['Dairy', 'Milk & shakes']},
+    {label: 'a snack', categories: ['Snack']}
+  ];
+  const missing = tripCategories.filter(group => !items.some(product => group.categories.includes(product.category)));
+  const prompts = `<aside class="missing-categories" data-missing-categories><b>${missing.length ? 'Round out the trip' : 'Core trip categories covered'}</b><p>Trip ideas, not nutrition requirements. ${missing.length ? `You may still want ${missing.map(group => group.label).join(', ')}.` : 'This demo basket includes a main, breakfast, dairy or drink, and snack.'}</p></aside>`;
+  const storeGroups = Object.entries(groups).map(([store, storeItems]) => {
+    const categories = storeItems.reduce((result, product) => { (result[product.category] ||= []).push(product); return result; }, {});
+    return `<section class="basket-store"><h2>${store}</h2>${Object.entries(categories).map(([category, categoryItems]) => `<div class="basket-category"><h3>${category}</h3>${categoryItems.map(product => `<div class="basket-line"><div><b>${product.name}</b><small>${product.protein}g · ${hasKnownPrice(product) ? `~${money(product.price / product.servings)} seeded / serving` : 'price unknown'}</small></div><button type="button" data-remove="${product.id}" aria-label="Remove ${product.name}">Remove</button></div>`).join('')}</div>`).join('')}</section>`;
+  }).join('');
+  const subtotal = unknownPriceCount ? `${money(totalCost)} known + ${unknownPriceCount} unknown` : money(totalCost);
+  app.innerHTML = `<section class="screen" data-screen="basket">${screenHead('Store-grouped trip', 'Grocery basket', 'Your saved trip, grouped for the store. Prices and inventory still require a current check.')}${items.length ? `${storeGroups}${prompts}<div class="basket-total"><span>Seeded one-serving subtotal</span><br><b>${totalProtein}g · ${subtotal}</b><p>No order or payment is submitted.</p></div>` : `<div class="empty-card"><span class="state-icon">▣</span><h2>Your basket is empty</h2><p>Add grocery products from Discover. Your trip stays on this device.</p><a class="primary" href="#discover">Find products</a></div>`}</section>`;
 }
 
 function render() {
@@ -209,7 +213,6 @@ function render() {
   document.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-current', tab.dataset.tab === currentRoute.name ? 'page' : 'false'));
   if (currentRoute.name === 'discover') renderDiscover();
   else if (currentRoute.name === 'saved') renderSaved();
-  else if (currentRoute.name === 'planner') renderPlanner();
   else if (currentRoute.name === 'basket') renderBasket();
   else renderProduct(currentRoute.id);
   updateCounts();
@@ -225,19 +228,10 @@ document.addEventListener('input', event => {
     document.querySelector('#search').focus({ preventScroll: true });
     requestAnimationFrame(() => scrollTo(0, position));
   }
-  if (event.target.id === 'target') document.querySelector('#targetOutput').value = `${event.target.value}g`;
 });
 
 document.addEventListener('change', event => {
   if (event.target.id === 'sort') { state.sort = event.target.value; persist(); renderDiscover(); }
-});
-
-document.addEventListener('submit', event => {
-  if (event.target.id !== 'plannerForm') return;
-  event.preventDefault();
-  const form = new FormData(event.target);
-  state.plannerResult = buildPlan(Number(form.get('target')), form.get('priority'));
-  renderPlanner();
 });
 
 document.addEventListener('click', event => {
@@ -259,8 +253,6 @@ document.addEventListener('click', event => {
   if (category) { state.category = category.dataset.category; persist(); renderDiscover(); return; }
   const stateAction = event.target.closest('[data-state-action]');
   if (stateAction) { state.dataState = navigator.onLine ? 'ready' : 'offline'; renderDiscover(); return; }
-  const usePlan = event.target.closest('[data-use-plan]');
-  if (usePlan) { state.basket = [...new Set([...state.basket, ...state.plannerResult.map(product => product.id)])]; persist(); navigate('#basket'); return; }
   const card = event.target.closest('[data-product-id]');
   if (card) { navigate(`#product/${card.dataset.productId}`); return; }
   const localLink = event.target.closest('a[href^="#"]');
@@ -284,6 +276,6 @@ render();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./service-worker.js').catch(() => {});
 
 window.ProteinFinds = {
-  products, state, scoreProduct, filteredProducts, buildPlan,
+  products: groceryProducts, state, scoreProduct, filteredProducts,
   setDataState(value) { state.dataState = value; if (currentRoute?.name !== 'discover') navigate('#discover'); else renderDiscover(); }
 };

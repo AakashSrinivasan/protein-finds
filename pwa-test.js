@@ -20,10 +20,10 @@ const assert = require('node:assert/strict');
 
   await context.setOffline(true);
   await page.waitForSelector('[data-state="offline"]');
-  assert.equal(await page.locator('[data-product-id]').count(), 16, 'cached catalog remains available behind the explicit offline state');
+  assert.equal(await page.locator('[data-product-id]').count(), 12, 'cached grocery catalog remains available behind the explicit offline state');
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-product-id]');
-  assert.equal(await page.locator('[data-product-id]').count(), 16, 'offline reload restores the cached catalog');
+  assert.equal(await page.locator('[data-product-id]').count(), 12, 'offline reload restores the cached grocery catalog');
   const image = page.locator('[data-product-image]').first();
   assert.ok(await image.evaluate(element => element.complete && element.naturalWidth > 0), 'an exact package image is cached offline');
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(element => getComputedStyle(element).position), 'fixed', 'standalone navigation remains app-like offline');
