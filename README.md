@@ -31,3 +31,5 @@ npm run verify
 ## Current boundary
 
 All product, price, ingredient, and availability records are seeded prototype data. They demonstrate discovery, filtering, comparison, saves, basket planning, and source handoffs; they are not current inventory or individualized medical advice.
+
+The versioned catalog/provenance contract and its migration boundary are documented in [`DATA.md`](DATA.md).
