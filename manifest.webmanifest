@@ -6,7 +6,7 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
+
   "background_color": "#f4f1e7",
   "theme_color": "#13251c",
   "categories": ["food", "health", "shopping"],
