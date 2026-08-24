@@ -33,15 +33,17 @@ const state = {
   locationStatus: 'idle',
   locationMessage: '',
   location: null,
-  mapCenter: null,
+  mapCenter: { lat: locationData.ZIP_CENTERS['95113'].lat, lon: locationData.ZIP_CENTERS['95113'].lon },
   mapMoved: false,
-  locationView: 'list',
+  locationView: 'map',
+  storeFilter: 'all',
   selectedStore: null,
   askQuery: '',
   askAnswer: null
 };
 let currentRoute = null;
 let deferredInstallPrompt = null;
+let nearbyMap = null;
 
 const money = value => `$${Number(value).toFixed(2)}`;
 const byId = id => groceryProducts.find(product => product.id === id);
@@ -153,6 +155,12 @@ function nearbyStores() {
   return state.location ? locationData.storesNear(state.location) : [];
 }
 
+function visibleNearbyStores() {
+  const origin = state.location || state.mapCenter;
+  const stores = locationData.storesNear(origin);
+  return state.storeFilter === 'all' ? stores : stores.filter(store => store.name === state.storeFilter);
+}
+
 function nearestStoreForProduct(product) {
   if (!state.location) return null;
   return nearbyStores().find(store => product.stores.includes(store.name)) || null;
@@ -165,6 +173,7 @@ function setLocation(center) {
   state.locationStatus = 'ready';
   state.locationMessage = '';
   state.selectedStore = null;
+  state.locationView = 'map';
   renderNearby();
 }
 
@@ -175,6 +184,7 @@ function storeCard(store, index) {
     <button class="store-rank" type="button" data-select-store="${store.id}" aria-label="Select ${store.name}">${index + 1}</button>
     <div class="store-copy"><p class="store-distance">${store.distanceMiles.toFixed(1)} mi away</p><h3>${store.name}</h3><p>${store.address}</p>
       <div class="store-tags"><span>${matching.length} catalog matches</span><span>Inventory not checked</span></div>
+      ${matching.length ? `<div class="store-products">${matching.slice(0, 3).map(product => `<a href="#product/${product.id}">${product.name}</a>`).join('')}</div>` : ''}
       <p class="availability-note">${store.availabilityLabel} · checked ${store.availabilityObservedAt}</p>
     </div>
     <a class="store-source" href="${store.coordinateSourceUrl}" target="_blank" rel="noopener">Source</a>
@@ -182,27 +192,60 @@ function storeCard(store, index) {
 }
 
 function mapMarkup(stores) {
-  const center = state.mapCenter || state.location;
-  const markers = stores.map((store, index) => {
-    const point = locationData.projectStore(store, center);
-    return `<button class="map-marker" style="--x:${point.x}%;--y:${point.y}%" type="button" data-store-marker="${store.id}" aria-label="${store.name}, ${store.distanceMiles.toFixed(1)} miles away" aria-pressed="${state.selectedStore === store.id}"><span>${index + 1}</span></button>`;
-  }).join('');
   const selectedIndex = stores.findIndex(store => store.id === state.selectedStore);
   return `<div class="map-wrap">
-    <div class="map-status"><span>Store map</span><b>${state.mapMoved ? 'Map moved · results unchanged · tap Search here' : 'Map and list synchronized'}</b></div>
-    <div class="store-map" data-store-map aria-label="Map of ${stores.length} seeded store coordinates">
-      <span class="map-road road-one"></span><span class="map-road road-two"></span>${markers}
-      <div class="map-pan" aria-label="Move map center"><button type="button" data-map-pan="north" aria-label="Move map north">↑</button><div><button type="button" data-map-pan="west" aria-label="Move map west">←</button><button type="button" data-map-pan="east" aria-label="Move map east">→</button></div><button type="button" data-map-pan="south" aria-label="Move map south">↓</button></div>
-    </div>
-    <button class="primary search-here" type="button" data-search-here ${state.mapMoved ? '' : 'disabled'}>Search here</button>
-    <div class="map-store-sheet">${selectedIndex >= 0 ? storeCard(stores[selectedIndex], selectedIndex) : '<p>Tap a numbered store marker to see grocery matches.</p>'}</div>
-    <p class="map-fallback">Free schematic map: no tile request or API key. Coordinates are seeded fixtures; proximity never means in stock.</p>
+    <div class="map-status"><span>OpenStreetMap</span><b>${state.mapMoved ? 'Map moved · results unchanged' : 'Map and list synchronized'}</b></div>
+    <div class="store-map" id="storeMap" data-store-map aria-label="Interactive geographic map of ${stores.length} grocery stores"></div>
+    <button class="map-recenter" type="button" data-map-recenter aria-label="Recenter map on ${state.location ? state.location.label : 'Downtown San Jose'}">◎</button>
+    <button class="primary search-here" type="button" data-search-here ${state.mapMoved ? '' : 'disabled'}>Search this area</button>
+    <div class="map-store-sheet">${selectedIndex >= 0 ? storeCard(stores[selectedIndex], selectedIndex) : '<p>Tap a grocery marker to see its products and store details.</p>'}</div>
+    <p class="map-fallback">© OpenStreetMap contributors · store coordinates are seeded fixtures · proximity never means in stock.</p>
   </div>`;
 }
 
+function initializeNearbyMap(stores) {
+  const node = document.querySelector('#storeMap');
+  if (!node || !window.L) return;
+  const center = state.mapCenter || state.location || locationData.ZIP_CENTERS['95113'];
+  nearbyMap = window.L.map(node, { zoomControl: true }).setView([center.lat, center.lon], 12);
+  window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(nearbyMap);
+  stores.forEach((store, index) => {
+    const marker = window.L.marker([store.lat, store.lon], {
+      title: store.name,
+      alt: `${store.name}, ${store.distanceMiles.toFixed(1)} miles away`
+    }).addTo(nearbyMap);
+    marker.bindTooltip(`${index + 1}. ${store.name}`);
+    marker.on('click', event => {
+      if (event.originalEvent) window.L.DomEvent.stopPropagation(event.originalEvent);
+      state.selectedStore = store.id;
+      renderNearby();
+    });
+    marker.getElement()?.setAttribute('data-store-marker', store.id);
+  });
+  if (state.location) {
+    window.L.circleMarker([state.location.lat, state.location.lon], {
+      radius: 8, color: '#fff', weight: 3, fillColor: '#2877d4', fillOpacity: 1
+    }).addTo(nearbyMap).bindTooltip(state.location.label).getElement()?.setAttribute('data-location-puck', 'true');
+  }
+  nearbyMap.whenReady(() => {
+    nearbyMap.on('moveend zoomend', () => {
+      const moved = nearbyMap.getCenter();
+      state.mapCenter = { lat: moved.lat, lon: moved.lng };
+      state.mapMoved = true;
+      document.querySelector('[data-search-here]')?.removeAttribute('disabled');
+      const status = document.querySelector('.map-status b');
+      if (status) status.textContent = 'Map moved · results unchanged';
+    });
+  });
+}
+
 function renderNearby() {
+  if (nearbyMap) { nearbyMap.remove(); nearbyMap = null; }
   const ready = state.locationStatus === 'ready' && state.location;
-  const stores = ready ? nearbyStores() : [];
+  const stores = visibleNearbyStores();
   const message = state.locationMessage ? `<p class="location-message" role="${state.locationStatus === 'searching' ? 'status' : 'alert'}">${state.locationMessage}</p>` : '';
   app.innerHTML = `<section class="screen nearby-screen" data-screen="nearby">
     ${screenHead('Grocery map', 'Protein near you', 'Fast switching between one store list and one synchronized map, built for grocery decisions.')}
@@ -211,11 +254,12 @@ function renderNearby() {
       <form id="locationForm" class="location-form"><label for="zipInput">Search a ZIP</label><div><input id="zipInput" name="zip" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{5}(-[0-9]{4})?" placeholder="95113" aria-describedby="zipHelp"><button class="primary" type="submit">Go</button></div><small id="zipHelp">Demo coverage: 95113, 95129, and 95014.</small></form>
       <button class="secondary current-location" type="button" data-use-location ${state.locationStatus === 'searching' ? 'disabled' : ''}>Use current location</button>
       ${message}
-      ${ready ? `<div class="nearby-toolbar"><div class="location-heading"><b>${state.location.label}</b><span>${stores.length} stores sorted by distance</span></div><div class="view-toggle" aria-label="Store results view"><button type="button" data-location-view="list" aria-pressed="${state.locationView === 'list'}">☷ List</button><button type="button" data-location-view="map" aria-pressed="${state.locationView === 'map'}">⌖ Map</button></div></div>
-        <div class="filter-pills" aria-label="Nearby store filters"><span>Vegetarian matches</span><span>Distance</span><span>Freshness shown</span></div>
-        <div class="store-results" data-store-results data-view="${state.locationView}">${state.locationView === 'map' ? mapMarkup(stores) : stores.map(storeCard).join('')}</div>` : '<div class="location-empty"><b>See stores and grocery matches together</b><p>Enter a supported ZIP or share location only when you choose.</p></div>'}
+      <div class="nearby-toolbar"><div class="location-heading"><b>${ready ? state.location.label : 'Downtown San Jose'}</b><span>${stores.length} stores sorted by distance</span></div><div class="view-toggle" aria-label="Store results view"><button type="button" data-location-view="map" aria-pressed="${state.locationView === 'map'}">⌖ Map</button><button type="button" data-location-view="list" aria-pressed="${state.locationView === 'list'}">☷ List</button></div></div>
+      <div class="filter-pills" aria-label="Filter grocery stores">${['all', ...new Set(locationData.STORES.map(store => store.name))].map(filter => `<button type="button" data-store-filter="${filter}" aria-pressed="${state.storeFilter === filter}">${filter === 'all' ? 'All stores' : filter}</button>`).join('')}</div>
+      <div class="store-results" data-store-results data-view="${state.locationView}">${state.locationView === 'map' ? mapMarkup(stores) : stores.map(storeCard).join('')}</div>
     </section>
   </section>`;
+  if (state.locationView === 'map') requestAnimationFrame(() => initializeNearbyMap(stores));
 }
 
 function renderDiscover() {
@@ -395,17 +439,14 @@ document.addEventListener('click', event => {
   }
   const view = event.target.closest('[data-location-view]');
   if (view) { state.locationView = view.dataset.locationView; renderNearby(); return; }
+  const storeFilter = event.target.closest('[data-store-filter]');
+  if (storeFilter) { state.storeFilter = storeFilter.dataset.storeFilter; state.selectedStore = null; renderNearby(); return; }
   const selectStore = event.target.closest('[data-select-store]');
   if (selectStore) { state.selectedStore = selectStore.dataset.selectStore; state.locationView = 'map'; renderNearby(); return; }
   const marker = event.target.closest('[data-store-marker]');
   if (marker) { state.selectedStore = marker.dataset.storeMarker; renderNearby(); return; }
-  const pan = event.target.closest('[data-map-pan]');
-  if (pan) {
-    const moves = { north: [0.01, 0], south: [-0.01, 0], east: [0, 0.01], west: [0, -0.01] };
-    const [lat, lon] = moves[pan.dataset.mapPan];
-    state.mapCenter = { lat: state.mapCenter.lat + lat, lon: state.mapCenter.lon + lon };
-    state.mapMoved = true; renderNearby(); return;
-  }
+  const recenter = event.target.closest('[data-map-recenter]');
+  if (recenter && nearbyMap) { const center = state.location || locationData.ZIP_CENTERS['95113']; nearbyMap.setView([center.lat, center.lon], 12); return; }
   const searchHere = event.target.closest('[data-search-here]');
   if (searchHere) { setLocation({ ...state.mapCenter, label: 'Searched map area' }); return; }
   const card = event.target.closest('[data-product-id]');
