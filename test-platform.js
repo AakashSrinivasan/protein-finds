@@ -23,7 +23,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
 
   assert.equal(await page.locator('[data-product-id]').count(), 12, 'grocery discovery excludes restaurant records');
   assert.equal(await page.locator('[data-screen]:visible').count(), 1, 'only one focused screen renders');
-  assert.deepEqual(await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => tab.dataset.tab)), ['discover', 'ask', 'saved', 'basket'], 'primary navigation includes grounded Ask inside the grocery loop');
+  assert.deepEqual(await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => tab.dataset.tab)), ['discover', 'nearby', 'ask', 'saved', 'basket'], 'primary navigation includes Nearby and grounded Ask inside the grocery loop');
   assert.equal(await page.locator('[data-category="Restaurant"]').count(), 0, 'restaurants are not a top-level grocery category');
   assert.equal(await page.locator('[data-product-id] .decision-price').count(), 12, 'every grocery card shows price or an honest unknown state');
   assert.equal(await page.locator('[data-product-id] .decision-store').count(), 12, 'every grocery card shows its seeded store');

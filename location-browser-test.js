@@ -24,6 +24,7 @@ async function exerciseZipAndMap(browserType) {
   page.on('console', message => message.type() === 'error' && errors.push(message.text()));
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-tab="nearby"]').click();
   await page.fill('#zipInput', '95113');
   await page.locator('#locationForm button[type="submit"]').click();
 
@@ -50,7 +51,7 @@ async function exerciseZipAndMap(browserType) {
   assert.ok(await page.locator('[data-search-here]').isEnabled());
   assert.deepEqual(await page.evaluate(() => window.ProteinFinds.state.location), beforeSearch, 'moving the map does not silently refresh results');
   await page.locator('[data-search-here]').click();
-  assert.equal(await page.locator('.location-heading > span').textContent(), 'Searched map area');
+  assert.equal(await page.locator('.location-heading > b').textContent(), 'Searched map area');
   assert.ok(await page.locator('[data-search-here]').isDisabled());
   assert.match(await page.locator('.map-status').textContent(), /Map and list synchronized/);
   await assertNoAxeViolations(page, `${browserType.name()} map`);
@@ -79,6 +80,7 @@ async function exerciseZipAndMap(browserType) {
   const page = await context.newPage();
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   assert.equal(await page.evaluate(() => window.__geolocationCalls), 0, 'initial discovery does not ask for location');
+  await page.locator('[data-tab="nearby"]').click();
   await page.locator('[data-use-location]').click();
   await page.waitForSelector('[data-location-status="denied"]');
   assert.equal(await page.evaluate(() => window.__geolocationCalls), 1, 'location is requested only after the explicit tap');
@@ -92,9 +94,10 @@ async function exerciseZipAndMap(browserType) {
   });
   const grantedPage = await grantedContext.newPage();
   await grantedPage.goto(url, { waitUntil: 'domcontentloaded' });
+  await grantedPage.locator('[data-tab="nearby"]').click();
   await grantedPage.locator('[data-use-location]').click();
   await grantedPage.waitForSelector('[data-location-status="ready"]');
-  assert.equal(await grantedPage.locator('.location-heading > span').textContent(), 'Current location');
+  assert.equal(await grantedPage.locator('.location-heading > b').textContent(), 'Current location');
   assert.deepEqual(await grantedPage.evaluate(() => window.ProteinFinds.state.location), {
     lat: 37.3337, lon: -121.8907, label: 'Current location'
   }, 'granted coordinates drive the same deterministic store results');

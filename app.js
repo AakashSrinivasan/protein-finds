@@ -189,7 +189,7 @@ function mapMarkup(stores) {
   }).join('');
   const selectedIndex = stores.findIndex(store => store.id === state.selectedStore);
   return `<div class="map-wrap">
-    <div class="map-status"><span>Store map</span><b>${state.mapMoved ? 'Map moved · tap Search here' : 'Map and list synchronized'}</b></div>
+    <div class="map-status"><span>Store map</span><b>${state.mapMoved ? 'Map moved · results unchanged · tap Search here' : 'Map and list synchronized'}</b></div>
     <div class="store-map" data-store-map aria-label="Map of ${stores.length} seeded store coordinates">
       <span class="map-road road-one"></span><span class="map-road road-two"></span>${markers}
       <div class="map-pan" aria-label="Move map center"><button type="button" data-map-pan="north" aria-label="Move map north">↑</button><div><button type="button" data-map-pan="west" aria-label="Move map west">←</button><button type="button" data-map-pan="east" aria-label="Move map east">→</button></div><button type="button" data-map-pan="south" aria-label="Move map south">↓</button></div>
@@ -211,7 +211,7 @@ function renderNearby() {
       <form id="locationForm" class="location-form"><label for="zipInput">Search a ZIP</label><div><input id="zipInput" name="zip" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{5}(-[0-9]{4})?" placeholder="95113" aria-describedby="zipHelp"><button class="primary" type="submit">Go</button></div><small id="zipHelp">Demo coverage: 95113, 95129, and 95014.</small></form>
       <button class="secondary current-location" type="button" data-use-location ${state.locationStatus === 'searching' ? 'disabled' : ''}>Use current location</button>
       ${message}
-      ${ready ? `<div class="nearby-toolbar"><div><b>${state.location.label}</b><span>${stores.length} stores sorted by distance</span></div><div class="view-toggle" aria-label="Store results view"><button type="button" data-location-view="list" aria-pressed="${state.locationView === 'list'}">☷ List</button><button type="button" data-location-view="map" aria-pressed="${state.locationView === 'map'}">⌖ Map</button></div></div>
+      ${ready ? `<div class="nearby-toolbar"><div class="location-heading"><b>${state.location.label}</b><span>${stores.length} stores sorted by distance</span></div><div class="view-toggle" aria-label="Store results view"><button type="button" data-location-view="list" aria-pressed="${state.locationView === 'list'}">☷ List</button><button type="button" data-location-view="map" aria-pressed="${state.locationView === 'map'}">⌖ Map</button></div></div>
         <div class="filter-pills" aria-label="Nearby store filters"><span>Vegetarian matches</span><span>Distance</span><span>Freshness shown</span></div>
         <div class="store-results" data-store-results data-view="${state.locationView}">${state.locationView === 'map' ? mapMarkup(stores) : stores.map(storeCard).join('')}</div>` : '<div class="location-empty"><b>See stores and grocery matches together</b><p>Enter a supported ZIP or share location only when you choose.</p></div>'}
     </section>

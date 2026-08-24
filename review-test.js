@@ -36,9 +36,9 @@ async function auditAxe(page, name, axeSource) {
   assert.ok(await page.locator('[data-product-id]').first().boundingBox().then(box => box && box.y < 844));
   pass('first-viewport-product', 'search and an exact licensed product are visible at 390×844');
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(element => getComputedStyle(element).position), 'fixed');
-  pass('persistent-bottom-navigation', 'four focused grocery-loop destinations, including Ask, remain fixed');
+  pass('persistent-bottom-navigation', 'five focused grocery-loop destinations, including Nearby and Ask, remain fixed');
 
-  for (const tab of ['discover', 'ask', 'saved', 'basket']) {
+  for (const tab of ['discover', 'nearby', 'ask', 'saved', 'basket']) {
     await page.locator(`[data-tab="${tab}"]`).click();
     await page.waitForSelector(`[data-screen="${tab}"]:visible`);
     assert.equal(await page.locator('[data-screen]:visible').count(), 1, `${tab} renders one focused screen`);
@@ -50,8 +50,8 @@ async function auditAxe(page, name, axeSource) {
   await page.locator('[data-ask-prompt="soy-free snacks"]').click();
   assert.ok(await page.locator('[data-ask-product-id]').count() > 0, 'Ask renders catalog-grounded recommendations');
   assert.equal(await page.locator('[data-query-plan]').isVisible(), true, 'Ask displays its deterministic plan');
-  assert.match(await page.locator('.ask-answer').textContent(), /no model call/i, 'Ask identifies the deterministic no-model path');
-  pass('grounded-ask', 'soy-free snack prompt returns catalog IDs, field citations, honest unknowns, and a visible no-model plan');
+  assert.match(await page.locator('.ask-answer').textContent(), /grounded local catalog rules/i, 'Ask identifies the grounded catalog path');
+  pass('grounded-ask', 'soy-free snack prompt returns catalog IDs, field citations, honest unknowns, and an inspectable grounded plan');
 
   await page.locator('[data-tab="discover"]').click();
   await page.locator('[data-product-id]').first().click();

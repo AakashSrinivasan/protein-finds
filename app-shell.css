@@ -194,7 +194,7 @@ h1, h2, h3 { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-se
 .nearby-screen .screen-head { margin-bottom: 8px; }
 .nearby-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 8px; }
 .nearby-toolbar b, .nearby-toolbar span { display: block; }
-.nearby-toolbar span { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.nearby-toolbar span { margin-top: 2px; color: #4d5b52; font-size: 11px; }
 .nearby-toolbar .view-toggle { flex: 0 0 154px; margin: 0; }
 .filter-pills { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 10px; padding-bottom: 2px; scrollbar-width: none; }
 .filter-pills span, .store-tags span { flex: 0 0 auto; padding: 7px 10px; border: 1px solid #c9d5c9; border-radius: 999px; background: #f3f7ee; color: var(--green); font-size: 10px; font-weight: 800; }
@@ -203,7 +203,7 @@ h1, h2, h3 { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-se
 .store-card { grid-template-columns: 44px minmax(0, 1fr) auto; align-items: start; }
 .store-rank { display: grid; width: 44px; height: 44px; place-items: center; border: 0; border-radius: 50%; background: var(--green); color: white; font-weight: 900; cursor: pointer; }
 .store-copy { min-width: 0; }
-.store-tags { display: flex; gap: 5px; margin: 8px 0; overflow-x: auto; }
+.store-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; overflow: visible; }
 .store-tags span { padding: 5px 7px; font-size: 9px; }
 .store-card .availability-note { grid-column: auto; padding-top: 0; border: 0; }
 .store-card > .store-source { grid-row: 1; grid-column: 3; }
