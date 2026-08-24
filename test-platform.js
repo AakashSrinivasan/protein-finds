@@ -23,7 +23,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
 
   assert.equal(await page.locator('[data-product-id]').count(), 12, 'grocery discovery excludes restaurant records');
   assert.equal(await page.locator('[data-screen]:visible').count(), 1, 'only one focused screen renders');
-  assert.deepEqual(await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => tab.dataset.tab)), ['discover', 'saved', 'basket'], 'primary navigation matches the grocery loop');
+  assert.deepEqual(await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => tab.dataset.tab)), ['discover', 'nearby', 'ask', 'saved', 'basket'], 'primary navigation includes Nearby and grounded Ask inside the grocery loop');
   assert.equal(await page.locator('[data-category="Restaurant"]').count(), 0, 'restaurants are not a top-level grocery category');
   assert.equal(await page.locator('[data-product-id] .decision-price').count(), 12, 'every grocery card shows price or an honest unknown state');
   assert.equal(await page.locator('[data-product-id] .decision-store').count(), 12, 'every grocery card shows its seeded store');
@@ -43,6 +43,22 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
     assert.equal(image.license, 'CC BY-SA 3.0', 'exact image carries its license');
     assert.ok(fs.existsSync(path.join(root, image.src)), `local image exists: ${image.src}`);
   }
+
+  await page.locator('[data-tab="ask"]').click();
+  await page.fill('#askInput', 'best protein cereal');
+  await page.click('#askForm button[type="submit"]');
+  assert.equal(await page.locator('[data-query-plan]').isVisible(), true, 'Ask exposes the deterministic query plan');
+  assert.equal(await page.locator('[data-ask-product-id="magic-spoon"]').count(), 1, 'cereal intent resolves to a catalog record');
+  assert.match(await page.locator('[data-ask-product-id="magic-spoon"]').textContent(), /Price unknown[\s\S]*Availability unknown/, 'Ask exposes unsupported price and availability honestly');
+  assert.match(await page.locator('.field-citations').textContent(), /protein[\s\S]*calories[\s\S]*efficiency/, 'Ask cites actual ranking fields');
+  const askIds = await page.locator('[data-ask-product-id]').evaluateAll(nodes => nodes.map(node => node.dataset.askProductId));
+  const catalogIds = await page.evaluate(() => window.ProteinFinds.products.map(product => product.id));
+  assert.ok(askIds.every(id => catalogIds.includes(id)), 'every Ask recommendation resolves to the browser catalog');
+  await page.fill('#askInput', '<img src=x onerror=alert(1)>');
+  await page.click('#askForm button[type="submit"]');
+  assert.equal(await page.locator('[data-ask-product-id]').count(), 0, 'unsupported hostile input fails closed');
+  assert.equal(await page.locator('.ask-answer img').count(), 0, 'Ask input is not interpreted as markup');
+  await page.locator('[data-tab="discover"]').click();
 
   await page.locator('[data-category="Main proteins"]').click();
   assert.equal(await page.locator('[data-product-id]').count(), 5, 'trip-led category groups egg and plant-meat mains');
@@ -69,6 +85,12 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.match(await page.locator('[data-screen="basket"]').textContent(), /Safeway[\s\S]*Plant meat/, 'basket groups items by store and category');
   assert.match(await page.locator('[data-missing-categories]').textContent(), /Trip ideas, not nutrition requirements/i, 'missing-category prompts avoid medical framing');
   assert.match(await page.locator('[data-screen="basket"]').textContent(), /No order or payment is submitted/, 'basket is source-honest');
+  await page.locator('[data-tab="ask"]').click();
+  await page.locator('[data-ask-prompt="improve my basket"]').click();
+  assert.match(await page.locator('.ask-summary').textContent(), /basket is missing/i, 'basket improvement reads the current persisted basket');
+  assert.equal(await page.locator('[data-ask-product-id="boca-original"]').count(), 0, 'basket improvement does not recommend an item already in the basket');
+  assert.ok(await page.locator('[data-ask-product-id]').count() > 0, 'basket improvement fills missing trip categories from catalog records');
+  await page.locator('[data-tab="basket"]').click();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-screen="basket"] .basket-line');
   assert.equal(await page.locator('[data-screen="basket"] .basket-line').count(), 1, 'basket persists across refresh');

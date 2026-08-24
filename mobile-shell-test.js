@@ -37,6 +37,16 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
 
   if (screenshot) await page.screenshot({ path: path.join(artifactDir, screenshot), fullPage: false });
 
+  await page.click('[data-tab="ask"]');
+  await page.click('[data-ask-prompt="soy-free snacks"]');
+  await page.waitForSelector('[data-ask-product-id]');
+  assert.equal(await page.locator('[data-query-plan]').isVisible(), true, `${label}: Ask exposes its deterministic plan`);
+  assert.ok(await page.locator('[data-ask-product-id]').count() > 0, `${label}: Ask returns catalog records`);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, `${label}: Ask has no horizontal overflow`);
+  if (screenshot) await page.screenshot({ path: path.join(artifactDir, `ask-${screenshot}`), fullPage: false });
+  await page.click('[data-tab="discover"]');
+  await page.waitForSelector('[data-product-id]');
+
   await page.locator('[data-product-id]').first().click();
   await page.waitForSelector('[data-screen="product"]:visible');
   const productHash = await page.evaluate(() => location.hash);
