@@ -25,9 +25,23 @@ async function exerciseZipAndMap(browserType) {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-tab="nearby"]').click();
+
+  await page.waitForSelector('.leaflet-tile-pane img');
+  assert.equal(await page.locator('[data-store-results]').getAttribute('data-view'), 'map', 'Nearby opens map-first');
+  assert.equal(await page.locator('[data-store-marker]').count(), 4, 'real map renders all grocery coordinates before ZIP entry');
+  assert.ok(await page.locator('.leaflet-tile-pane img').count() > 0, 'geographic basemap tile elements render');
+  assert.match(await page.locator('.leaflet-tile-pane img').first().getAttribute('src'), /tile\.openstreetmap\.org/);
+  assert.equal(await page.locator('.leaflet-control-zoom a').count(), 2, 'native map zoom controls render');
+  assert.ok(await page.locator('[data-map-recenter]').isVisible(), 'recenter control renders');
+  assert.ok(await page.locator('[data-search-here]').isDisabled(), 'Search this area stays hidden until map movement');
+
   await page.fill('#zipInput', '95113');
   await page.locator('#locationForm button[type="submit"]').click();
+  await page.waitForSelector('[data-location-puck]');
+  assert.equal(await page.locator('[data-store-marker]').count(), 4);
+  assert.equal(await page.locator('[data-location-puck]').count(), 1, 'selected ZIP has a location puck');
 
+  await page.locator('[data-location-view="list"]').click();
   assert.equal(await page.locator('[data-store-results][data-view="list"] [data-store-card]').count(), 4);
   const distances = await page.locator('[data-store-results][data-view="list"] .store-distance').allTextContents();
   const numericDistances = distances.map(value => Number.parseFloat(value));
@@ -39,23 +53,27 @@ async function exerciseZipAndMap(browserType) {
   if (browserType.name() === 'chromium') await page.screenshot({ path: path.join(artifactDir, 'location-list-390x844.png'), fullPage: false });
 
   await page.locator('[data-location-view="map"]').click();
-  assert.equal(await page.locator('[data-store-marker]').count(), 4);
-  assert.match(await page.locator('.map-status').textContent(), /Map and list synchronized/);
-  assert.ok(await page.locator('[data-search-here]').isDisabled());
+  await page.waitForSelector('[data-store-marker]');
   await page.locator('[data-store-marker]').first().click();
-  assert.equal(await page.locator('.map-wrap [data-store-card]').count(), 1, 'map selection reveals the matching store record');
+  await page.waitForSelector('.map-wrap [data-store-card]');
+  assert.ok(await page.locator('.map-wrap .store-products a').count() > 0, 'marker sheet links to matching product details');
 
   const beforeSearch = await page.evaluate(() => window.ProteinFinds.state.location);
-  await page.locator('[data-map-pan="north"]').click();
+  await page.locator('.leaflet-control-zoom-in').click();
+  await page.waitForFunction(() => !document.querySelector('[data-search-here]').disabled);
   assert.match(await page.locator('.map-status').textContent(), /results unchanged/);
-  assert.ok(await page.locator('[data-search-here]').isEnabled());
-  assert.deepEqual(await page.evaluate(() => window.ProteinFinds.state.location), beforeSearch, 'moving the map does not silently refresh results');
+  assert.deepEqual(await page.evaluate(() => window.ProteinFinds.state.location), beforeSearch, 'panning does not silently refresh results');
   await page.locator('[data-search-here]').click();
   assert.equal(await page.locator('.location-heading > b').textContent(), 'Searched map area');
   assert.ok(await page.locator('[data-search-here]').isDisabled());
-  assert.match(await page.locator('.map-status').textContent(), /Map and list synchronized/);
+
   await assertNoAxeViolations(page, `${browserType.name()} map`);
   if (browserType.name() === 'chromium') await page.screenshot({ path: path.join(artifactDir, 'location-map-390x844.png'), fullPage: false });
+
+  await page.locator('[data-store-filter="Target"]').click();
+  await page.waitForSelector('[data-store-marker]');
+  assert.equal(await page.locator('[data-store-marker]').count(), 1, 'store filters alter map markers');
+  assert.equal(await page.locator('[data-store-filter="Target"]').getAttribute('aria-pressed'), 'true');
 
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false);
   assert.deepEqual(errors, [], `${browserType.name()} has no console/page errors`);
@@ -101,7 +119,8 @@ async function exerciseZipAndMap(browserType) {
   assert.deepEqual(await grantedPage.evaluate(() => window.ProteinFinds.state.location), {
     lat: 37.3337, lon: -121.8907, label: 'Current location'
   }, 'granted coordinates drive the same deterministic store results');
-  assert.equal(await grantedPage.locator('[data-store-card]').count(), 4);
+  assert.equal(await grantedPage.locator('[data-store-marker]').count(), 4);
+  assert.equal(await grantedPage.locator('[data-location-puck]').count(), 1, 'current location is visible as a puck on the map');
   await grantedContext.close();
   await browser.close();
 
