@@ -49,6 +49,24 @@ test('preparation modes are mutually clear and never infer readiness', () => {
   assert.ok(heat.results.every(product => product.prep !== 'Ready now'));
 });
 
+test('unknown preparation fails closed for every preparation filter', () => {
+  const unknown = { ...products[0], id: 'unknown-prep', name: 'Unknown prep', prep: undefined };
+  assert.equal(screener.run([unknown], { prep: 'ready' }).results.length, 0);
+  assert.equal(screener.run([unknown], { prep: 'heat' }).results.length, 0);
+});
+
+test('unknown values sort after known values for every supported sort', () => {
+  const knownHigh = { ...products[0], id: 'known-high', name: 'Known high', protein: 20, calories: 100, efficiency: 20, pricePer25: 2, availability: 'demo-available' };
+  const knownLow = { ...products[0], id: 'known-low', name: 'Known low', protein: 10, calories: 200, efficiency: 5, pricePer25: 3, availability: 'demo-available' };
+  const baseUnknown = { ...products[0], id: 'unknown', name: 'Aardvark unknown', protein: undefined, calories: undefined, efficiency: undefined, pricePer25: undefined, availability: 'demo-unavailable' };
+  for (const sort of ['protein', 'calories', 'efficiency', 'price']) {
+    const result = screener.run([baseUnknown, knownLow, knownHigh], { sort });
+    assert.equal(result.results.at(-1).id, 'unknown', `${sort} keeps unknown values last`);
+  }
+  const unknownName = { ...knownHigh, id: 'unknown-name', name: undefined };
+  assert.equal(screener.run([unknownName, knownLow, knownHigh], { sort: 'name' }).results.at(-1).id, 'unknown-name', 'name keeps an unknown label last');
+});
+
 test('unknown seeded prices sort last and remain counted', () => {
   const result = screener.run(products, { sort: 'price' });
   assert.equal(result.unknownPriceCount, 1);
@@ -78,4 +96,29 @@ test('active clauses are plain-language and removable by stable keys', () => {
   }, ['Dairy']));
   assert.deepEqual(Array.from(clauses, clause => clause.key), ['category', 'minProtein', 'maxCalories', 'exclude:soy', 'prep']);
   assert.match(Array.from(clauses, clause => clause.label).join(' · '), /Type is Dairy.*At least 20g protein.*No more than 200 calories.*Soy-free.*Ready to eat/);
+});
+
+test('pagination bounds the rendered slice while preserving stable global counts', () => {
+  const generated = Array.from({ length: 10_000 }, (_, index) => ({
+    ...products[index % products.length],
+    id: `generated-${String(index).padStart(5, '0')}`,
+    name: `Generated ${String(index).padStart(5, '0')}`,
+    protein: index % 101,
+    calories: 50 + (index % 500),
+    efficiency: index % 43
+  }));
+  const run = screener.run(generated, { sort: 'protein' });
+  const first = screener.paginate(run.results, 1, 24);
+  const last = screener.paginate(run.results, 9999, 24);
+  assert.equal(run.results.length, 10_000);
+  assert.equal(first.items.length, 24);
+  assert.equal(first.totalResults, 10_000);
+  assert.equal(first.pageCount, 417);
+  assert.equal(first.start, 1);
+  assert.equal(first.end, 24);
+  assert.equal(last.page, 417);
+  assert.equal(last.items.length, 16);
+  assert.equal(last.start, 9985);
+  assert.equal(last.end, 10_000);
+  assert.ok(first.items.every((product, index, items) => index === 0 || items[index - 1].protein >= product.protein));
 });

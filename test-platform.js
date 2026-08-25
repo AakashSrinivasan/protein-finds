@@ -38,7 +38,8 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.notEqual(await page.locator('.hero-leader b').textContent(), initialLeader, 'goal selection changes the visible current leader');
   await page.selectOption('#sort', 'recommended');
   assert.equal(await page.locator('[data-screen]:visible').count(), 1, 'only one focused screen renders');
-  assert.deepEqual(await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => tab.dataset.tab)), ['discover', 'screener', 'nearby', 'ask', 'saved', 'basket'], 'primary navigation includes the universal screener, Nearby, and grounded Ask');
+  assert.deepEqual(await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => tab.dataset.tab)), ['discover', 'screener', 'nearby', 'ask', 'basket'], 'primary navigation stays at five destinations while retaining Screen, Nearby, and Ask');
+  assert.equal(await page.locator('[data-header-saved]').count(), 1, 'Saved remains one tap away outside primary navigation');
   assert.equal(await page.locator('[data-category="Restaurant"]').count(), 0, 'restaurants are not a top-level grocery category');
   assert.equal(await page.locator('[data-product-id] .decision-price').count(), 12, 'every grocery card shows price or an honest unknown state');
   assert.equal(await page.locator('[data-product-id] .decision-store').count(), 12, 'every grocery card shows its seeded store');
@@ -79,7 +80,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   for (const id of compareIds) await page.locator(`[data-compare="${id}"]`).click();
   await page.locator('[data-compare-tray] a[href="#compare"]').click();
   assert.equal(await page.locator('.compare-recommendation').getAttribute('data-recommendation-id'), 'good-culture', 'most-protein goal explicitly changes the comparison recommendation');
-  assert.match(await page.locator('.compare-recommendation').textContent(), /Most protein goal[\s\S]*14g/i, 'goal-aware recommendation states the exact winning criterion');
+  assert.match(await page.locator('.compare-recommendation').textContent(), /Most protein screen[\s\S]*14g/i, 'goal-aware recommendation states the exact winning criterion');
   await page.locator('a[href="#discover"]').first().click();
   await page.locator('[data-clear-compare]').click();
   await page.selectOption('#sort', 'recommended');
@@ -126,12 +127,73 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   await page.locator('#screenBuilder > summary').click();
   await page.locator('[data-screen-reset]').first().click();
   await page.selectOption('#screenSort', 'price');
-  assert.match(await page.locator('.screen-unknown-note').textContent(), /1 result has unknown seeded value.*shown last/i, 'unknown values are explicitly disclosed');
+  assert.match(await page.locator('.screen-unknown-note').textContent(), /1 result has an unknown seeded cost.*shown last/i, 'unknown values are explicitly disclosed');
   assert.equal(await page.locator('[data-screen-result]').last().getAttribute('data-screen-result'), 'magic-spoon', 'unknown seeded price sorts last');
   await page.fill('#screenMaxCalories', '20');
   await page.locator('#screenMaxCalories').press('Tab');
   assert.equal(await page.locator('[data-screen-result]').count(), 0, 'impossible screen returns no fabricated matches');
   assert.match(await page.locator('.screen-empty').textContent(), /No products match all of that[\s\S]*will not invent a match/i, 'empty state fails closed');
+  await page.locator('[data-screen-reset]').first().click();
+
+  await page.fill('#screenMinProtein', '10');
+  await page.locator('#screenMinProtein').press('Tab');
+  await page.selectOption('#screenSort', 'protein');
+  for (const id of ['beyond-steak', 'oikos-pro', 'good-culture']) await page.locator(`[data-screen-result="${id}"] [data-compare]`).click();
+  const screenerScroll = await page.evaluate(() => { scrollTo(0, document.body.scrollHeight - innerHeight - 80); return scrollY; });
+  assert.ok(screenerScroll > 0, 'screener comparison fixture records an independent scroll position');
+  await page.locator('[data-compare-tray] a[href="#compare"]').click();
+  await page.waitForSelector('[data-screen="compare"]');
+  assert.equal(await page.locator('.detail-back').getAttribute('href'), '#screener', 'comparison returns to the originating Screener route');
+  assert.match(await page.locator('.detail-back').textContent(), /Back to Screener/, 'comparison names the originating Screener route');
+  assert.equal(await page.locator('.compare-recommendation').getAttribute('data-recommendation-goal'), 'protein', 'comparison preserves the active Screener ranking intent');
+  assert.equal(await page.locator('.compare-recommendation').getAttribute('data-recommendation-id'), 'beyond-steak', 'most-protein screen recommends the selected product with the highest known protein');
+  await page.locator('.detail-back').click();
+  await page.waitForSelector('[data-screen="screener"]');
+  await page.waitForFunction(expected => Math.abs(scrollY - expected) < 8, screenerScroll, { polling: 100 });
+  assert.equal(await page.locator('#screenMinProtein').inputValue(), '10', 'Screener criteria survive comparison');
+  assert.equal(await page.locator('#screenSort').inputValue(), 'protein', 'Screener sort survives comparison');
+  assert.ok(await page.evaluate(expected => Math.abs(scrollY - expected) < 8, screenerScroll), 'Screener scroll survives comparison');
+  await page.locator('[data-clear-compare]').click();
+
+  const originalProductCount = await page.evaluate(() => window.ProteinFinds.products.length);
+  await page.evaluate(() => {
+    const base = window.ProteinFinds.products[0];
+    for (let index = 0; index < 40; index += 1) window.ProteinFinds.products.push({
+      ...base, id: `generated-browser-${String(index).padStart(2, '0')}`, name: `Generated browser ${String(index).padStart(2, '0')}`,
+      category: 'Generated imports', protein: index, calories: 100 + index, efficiency: index / 2, image: null
+    });
+    window.ProteinFinds.products.push({
+      ...base,
+      id: 'hostile-import',
+      name: '<svg onload="window.__catalogInjected=true">',
+      brand: '<script>window.__catalogInjected=true</script>',
+      category: '<img src=x onerror="window.__catalogInjected=true">',
+      prep: undefined,
+      protein: undefined,
+      calories: undefined,
+      efficiency: undefined,
+      image: null
+    });
+  });
+  await page.locator('[data-tab="ask"]').click();
+  await page.locator('[data-tab="screener"]').click();
+  await page.locator('[data-screen-reset]').first().click();
+  assert.equal(await page.locator('[data-screen-result]').count(), 24, 'Screener renders only one bounded result page');
+  assert.match(await page.locator('[data-screen-page-summary]').textContent(), /Showing 1–24 of 53/, 'pagination preserves the stable total result count');
+  assert.match(await page.locator('.screen-pagination').textContent(), /Page 1 of 3/, 'pagination reports deterministic page boundaries');
+  await page.locator('[data-screen-page="2"]').click();
+  assert.equal(await page.locator('[data-screen-result]').count(), 24, 'second page remains bounded to 24 rendered cards');
+  assert.match(await page.locator('[data-screen-page-summary]').textContent(), /Showing 25–48 of 53/, 'second-page range is correct');
+  assert.equal(await page.locator('.screen-rank').first().textContent(), '25', 'global rank remains stable across pages');
+  await page.selectOption('#screenCategory', '<img src=x onerror="window.__catalogInjected=true">');
+  assert.equal(await page.locator('[data-screen-result]').count(), 1, 'hostile imported category remains selectable as inert text');
+  assert.equal(await page.locator('#screenCategory option:checked').textContent(), '<img src=x onerror="window.__catalogInjected=true">', 'catalog-derived category label renders literally');
+  assert.equal(await page.locator('[data-screen-result] script,[data-screen-result] svg,[data-screen-result] img').count(), 0, 'hostile imported text never becomes executable markup');
+  assert.match(await page.locator('[data-screen-result]').textContent(), /Unknown/, 'unknown imported fields render as Unknown rather than undefined');
+  assert.equal(await page.evaluate(() => window.__catalogInjected === true), false, 'hostile imported strings do not execute');
+  await page.selectOption('#screenPrep', 'heat');
+  assert.equal(await page.locator('[data-screen-result]').count(), 0, 'unknown preparation fails closed in the rendered Screener');
+  await page.evaluate(count => window.ProteinFinds.products.splice(count), originalProductCount);
   await page.locator('[data-screen-reset]').first().click();
   await page.locator('[data-tab="discover"]').click();
 
@@ -143,7 +205,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.equal(await page.locator('[data-product-id]').count(), 3, 'search includes both BOCA products and one seeded comparison reference');
   await page.locator('[data-save="boca-original"]').click();
   assert.equal(await page.locator('#savedCount').textContent(), '1', 'save count updates');
-  await page.locator('[data-tab="saved"]').click();
+  await page.locator('[data-header-saved]').click();
   await page.waitForSelector('[data-screen="saved"] [data-product-id]');
   assert.equal(await page.locator('[data-screen="saved"] [data-product-id]').count(), 1, 'saved screen contains the exact saved product');
   await page.reload({ waitUntil: 'domcontentloaded' });

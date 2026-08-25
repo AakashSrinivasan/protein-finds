@@ -83,7 +83,7 @@ async function auditAxe(page, name, axeSource) {
   await page.locator('a[href="#discover"]').first().click();
   await page.locator('[data-clear-compare]').click();
 
-  for (const tab of ['discover', 'screener', 'nearby', 'ask', 'saved', 'basket']) {
+  for (const tab of ['discover', 'screener', 'nearby', 'ask', 'basket']) {
     await page.locator(`[data-tab="${tab}"]`).click();
     await page.waitForSelector(`[data-screen="${tab}"]:visible`);
     assert.equal(await page.locator('[data-screen]:visible').count(), 1, `${tab} renders one focused screen`);
