@@ -42,6 +42,20 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
 
   if (screenshot) await page.screenshot({ path: path.join(artifactDir, screenshot), fullPage: false });
 
+  await page.click('[data-tab="screener"]');
+  await page.waitForSelector('[data-screen="screener"]');
+  assert.equal(await page.locator('[data-screen-result]').count(), 12, `${label}: screener starts with the full truthful grocery seed`);
+  assert.ok(await page.locator('[data-screen-result-count]').isVisible(), `${label}: screener exposes its live result count`);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, `${label}: screener has no horizontal overflow`);
+  const screenerTargets = await page.locator('[data-screen="screener"] button:visible,[data-screen="screener"] a:visible,[data-screen="screener"] input:visible,[data-screen="screener"] select:visible').evaluateAll(nodes => nodes.map(node => {
+    const rect = node.getBoundingClientRect();
+    return { label: (node.textContent || node.getAttribute('aria-label') || '').trim(), width: rect.width, height: rect.height };
+  }).filter(target => target.width < 43.5 || target.height < 43.5));
+  assert.deepEqual(screenerTargets, [], `${label}: screener controls meet 44px minimum`);
+  if (screenshot) await page.screenshot({ path: path.join(artifactDir, `screener-${screenshot}`), fullPage: false });
+  await page.click('[data-tab="discover"]');
+  await page.waitForSelector('[data-product-id]');
+
   await page.click('[data-tab="ask"]');
   await page.click('[data-ask-prompt="soy-free snacks"]');
   await page.waitForSelector('[data-ask-product-id]');

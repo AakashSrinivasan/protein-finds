@@ -1,7 +1,7 @@
 {
   "name": "Protein Finds",
   "short_name": "Protein Finds",
-  "description": "Find, compare, and plan a vegetarian protein grocery trip.",
+  "description": "Screen, compare, and understand vegetarian protein products.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

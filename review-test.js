@@ -83,13 +83,26 @@ async function auditAxe(page, name, axeSource) {
   await page.locator('a[href="#discover"]').first().click();
   await page.locator('[data-clear-compare]').click();
 
-  for (const tab of ['discover', 'nearby', 'ask', 'saved', 'basket']) {
+  for (const tab of ['discover', 'screener', 'nearby', 'ask', 'saved', 'basket']) {
     await page.locator(`[data-tab="${tab}"]`).click();
     await page.waitForSelector(`[data-screen="${tab}"]:visible`);
     assert.equal(await page.locator('[data-screen]:visible').count(), 1, `${tab} renders one focused screen`);
     assert.equal(await page.locator(`[data-screen="${tab}"]`).count(), 1, `${tab} screen exists`);
     await auditAxe(page, `mobile-${tab}`, axeSource);
   }
+
+  await page.locator('[data-tab="screener"]').click();
+  await page.locator('[data-screen-template="high-protein"]').click();
+  assert.equal(await page.locator('[data-screen-result]').count(), 2, 'quick screen updates the real result universe');
+  assert.equal(await page.locator('[data-screen-result]').first().locator('.screen-metric').count(), 4, 'screen results expose four transparent metrics');
+  assert.equal(await page.locator('.active-screen button').count(), 2, 'active criteria are independently removable');
+  const screenerTargets = await page.locator('[data-screen="screener"] button:visible,[data-screen="screener"] a:visible,[data-screen="screener"] input:visible,[data-screen="screener"] select:visible').evaluateAll(nodes => nodes.map(node => {
+    const box = node.getBoundingClientRect();
+    return { label: (node.textContent || node.getAttribute('aria-label') || '').trim(), width: box.width, height: box.height };
+  }).filter(target => target.width < 43.5 || target.height < 43.5));
+  assert.deepEqual(screenerTargets, [], 'visible screener controls meet 44×44 minimum');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, 'screener fits the phone viewport');
+  pass('universal-screener', 'plain-language criteria, live counts, transparent metrics, removable clauses, and 44px controls');
 
   await page.locator('[data-tab="ask"]').click();
   await page.locator('[data-ask-prompt="soy-free snacks"]').click();

@@ -4,7 +4,8 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "node --test catalog-contract.test.js catalog-import.test.js location-data.test.js ask-protein.test.js && node test-platform.js",
+    "test": "node --test catalog-contract.test.js catalog-import.test.js location-data.test.js ask-protein.test.js product-screener.test.js && node test-platform.js",
+    "test:screener": "node --test product-screener.test.js",
     "test:ask": "node --test ask-protein.test.js",
     "test:contract": "node --test catalog-contract.test.js",
     "test:import": "node --test catalog-import.test.js",

@@ -6,6 +6,7 @@ const app = document.querySelector('#appMain');
 const liveRegion = document.querySelector('#liveRegion');
 const toastRegion = document.querySelector('#toastRegion');
 const { answerAsk } = window.AskProtein;
+const productScreener = window.ProductScreener;
 const storageKey = 'protein-finds-shell-state-v1';
 const scrollKey = 'protein-finds-scroll-v1';
 
@@ -23,6 +24,7 @@ const categoryFilters = {
   'Snacks': ['Snack']
 };
 const storedCategory = stored.category === 'All' ? 'All groceries' : stored.category;
+const screenerCategories = [...new Set(groceryProducts.map(product => product.category))].sort();
 const state = {
   saved: new Set((stored.saved || []).filter(id => groceryIds.has(id))),
   basket: (stored.basket || []).filter(id => groceryIds.has(id)),
@@ -41,7 +43,9 @@ const state = {
   storeFilter: 'all',
   selectedStore: null,
   askQuery: '',
-  askAnswer: null
+  askAnswer: null,
+  screener: productScreener.normalize(stored.screener, screenerCategories),
+  screenerBuilderOpen: matchMedia('(min-width: 700px)').matches
 };
 let currentRoute = null;
 let deferredInstallPrompt = null;
@@ -66,7 +70,8 @@ const routeKey = route => route.name === 'product' ? `product/${route.id}` : rou
 function persist() {
   localStorage.setItem(storageKey, JSON.stringify({
     saved: [...state.saved], basket: state.basket, search: state.search,
-    compare: [...state.compare], category: state.category, sort: state.sort
+    compare: [...state.compare], category: state.category, sort: state.sort,
+    screener: state.screener
   }));
   updateCounts();
 }
@@ -83,7 +88,7 @@ function updateCounts() {
 function parseRoute() {
   const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (hash.startsWith('product/')) return { name: 'product', id: hash.slice(8) };
-  return { name: ['discover', 'nearby', 'ask', 'saved', 'basket', 'compare'].includes(hash) ? hash : 'discover' };
+  return { name: ['discover', 'screener', 'nearby', 'ask', 'saved', 'basket', 'compare'].includes(hash) ? hash : 'discover' };
 }
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
@@ -329,6 +334,57 @@ function renderDiscover() {
   document.querySelector('#sort').value = state.sort;
 }
 
+function screenerResultMarkup(product, rank) {
+  const value = productScreener.hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown';
+  const comparing = state.compare.has(product.id);
+  const inBasket = state.basket.includes(product.id);
+  return `<article class="screen-result" data-screen-result="${product.id}">
+    <div class="screen-rank" aria-label="Result rank ${rank}">${rank}</div>
+    <div class="screen-product"><p>${escapeHtml(product.brand)}</p><h3><a href="#product/${escapeHtml(product.id)}">${escapeHtml(product.name)}</a></h3><small>${escapeHtml(product.category)} · ${escapeHtml(product.prep)}</small></div>
+    <div class="screen-result-metrics"><div class="screen-metric"><b>${product.protein}g</b><span>protein</span></div><div class="screen-metric"><b>${product.calories}</b><span>calories</span></div><div class="screen-metric"><b>${product.efficiency}</b><span>g / 100 cal</span></div><div class="screen-metric"><b>${value}</b><span>seeded / 25g</span></div></div>
+    <div class="screen-result-actions"><a class="secondary" href="#product/${escapeHtml(product.id)}">Details</a><button class="secondary" type="button" data-compare="${escapeHtml(product.id)}" aria-pressed="${comparing}">${comparing ? 'Comparing' : 'Compare'}</button><button class="primary" type="button" data-add="${escapeHtml(product.id)}" ${inBasket ? 'disabled' : ''}>${inBasket ? 'Added' : 'Add'}</button></div>
+  </article>`;
+}
+
+function renderScreener() {
+  const run = productScreener.run(groceryProducts, state.screener);
+  state.screener = run.screen;
+  const clauses = productScreener.clauses(run.screen);
+  const categoryOptions = ['All groceries', ...screenerCategories].map(category => `<option value="${escapeHtml(category)}" ${run.screen.category === category ? 'selected' : ''}>${category}</option>`).join('');
+  const exclusions = Object.entries(productScreener.EXCLUSIONS).map(([key, definition]) => `<label class="screen-check"><input type="checkbox" data-screen-exclusion="${key}" ${run.screen.exclusions.includes(key) ? 'checked' : ''}><span>${definition.label}</span></label>`).join('');
+  const sortOptions = Object.entries(productScreener.SORTS).map(([key, definition]) => `<option value="${key}" ${run.screen.sort === key ? 'selected' : ''}>${definition.label}</option>`).join('');
+  const activeCriteria = clauses.length
+    ? clauses.map(clause => `<button type="button" data-remove-screen-clause="${clause.key}" aria-label="Remove ${escapeHtml(clause.label)}">${escapeHtml(clause.label)} <span aria-hidden="true">×</span></button>`).join('')
+    : '<span class="screen-no-criteria">No filters yet · showing the complete grocery seed</span>';
+  const results = run.results.length
+    ? `<div class="screen-result-head" aria-hidden="true"><span>#</span><span>Product</span><span>Protein</span><span>Calories</span><span>Efficiency</span><span>Value</span><span>Actions</span></div><div class="screen-results">${run.results.map((product, index) => screenerResultMarkup(product, index + 1)).join('')}</div>`
+    : `<div class="empty-card screen-empty"><span class="state-icon">∅</span><h2>No products match all of that</h2><p>Remove one criterion to widen the screen. Protein Finds will not invent a match.</p><button class="primary" type="button" data-screen-reset>Clear screen</button></div>`;
+
+  app.innerHTML = `<section class="screen screener-screen" data-screen="screener">
+    ${screenHead('Universal product screener', 'Find exactly what fits', 'Choose normal food preferences. Results update from the catalog—no formulas, mystery score, or invented products.')}
+    <div class="screener-presets" aria-label="Quick screens"><button type="button" data-screen-template="high-protein">20g+ under 200 cal</button><button type="button" data-screen-template="soy-free">Soy-free standouts</button><button type="button" data-screen-template="ready-now">Ready-now 10g+</button></div>
+    <div class="screener-workspace">
+      <details class="screen-builder" id="screenBuilder" ${state.screenerBuilderOpen ? 'open' : ''}>
+        <summary><div><p class="eyebrow">Build your screen</p><h2>What should make the cut?</h2></div><span>${clauses.length ? `${clauses.length} active` : 'Customize'}</span></summary>
+        <form class="screen-builder-form"><div class="screen-builder-actions"><button type="button" data-screen-reset>Reset all filters</button></div>
+        <label class="screen-field"><span>Product type</span><select id="screenCategory">${categoryOptions}</select></label>
+        <fieldset><legend>Nutrition</legend><div class="screen-number-grid"><label class="screen-field"><span>At least</span><div><input id="screenMinProtein" type="number" min="0" step="1" inputmode="numeric" value="${run.screen.minProtein ?? ''}" placeholder="Any"><b>g protein</b></div></label><label class="screen-field"><span>No more than</span><div><input id="screenMaxCalories" type="number" min="0" step="10" inputmode="numeric" value="${run.screen.maxCalories ?? ''}" placeholder="Any"><b>calories</b></div></label></div></fieldset>
+        <fieldset><legend>Avoid</legend><div class="screen-check-grid">${exclusions}</div></fieldset>
+        <label class="screen-field"><span>Preparation</span><select id="screenPrep"><option value="all" ${run.screen.prep === 'all' ? 'selected' : ''}>Any preparation</option><option value="ready" ${run.screen.prep === 'ready' ? 'selected' : ''}>Ready to eat or drink now</option><option value="heat" ${run.screen.prep === 'heat' ? 'selected' : ''}>Cooking or heating is okay</option></select></label>
+        <p class="screen-builder-note">Thresholds include the number you enter. Supported fields are present for every product in this seed.</p></form>
+      </details>
+      <section class="screen-output" aria-live="polite">
+        <div class="screen-output-head"><div><p class="eyebrow">Live catalog results</p><h2><b data-screen-result-count>${run.results.length}</b> of ${run.total} products</h2></div><label><span>Show first</span><select id="screenSort">${sortOptions}</select></label></div>
+        <div class="active-screen" aria-label="Active screening criteria">${activeCriteria}</div>
+        ${run.screen.sort === 'price' && run.unknownPriceCount ? `<p class="screen-unknown-note">${run.unknownPriceCount} ${run.unknownPriceCount === 1 ? 'result has' : 'results have'} unknown seeded value and ${run.unknownPriceCount === 1 ? 'is' : 'are'} shown last.</p>` : ''}
+        ${results}
+      </section>
+    </div>
+    <details class="surface-truth screen-truth"><summary>Coverage and data policy</summary><p>This proves the screening workflow against ${run.total} grocery records—not a comprehensive market database. Every result is an existing catalog record. Prices are seeded, inventory is not live, and unsupported fields are not offered as filters.</p></details>
+    ${compareTrayMarkup()}
+  </section>`;
+}
+
 function renderSaved() {
   const saved = groceryProducts.filter(product => state.saved.has(product.id));
   app.innerHTML = `<section class="screen" data-screen="saved">${screenHead('Your shortlist', 'Saved finds', 'Keep exact products close while you build the trip.')}${saved.length ? `<div class="product-list">${saved.map(productCard).join('')}</div>` : `<div class="empty-card"><span class="state-icon">♡</span><h2>No saved products</h2><p>Save a shelf-worthy option from Discover. It will stay on this device.</p><a class="primary" href="#discover">Browse products</a></div>`}</section>`;
@@ -446,6 +502,7 @@ function render() {
   currentRoute = parseRoute();
   document.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-current', tab.dataset.tab === currentRoute.name ? 'page' : 'false'));
   if (currentRoute.name === 'discover') renderDiscover();
+  else if (currentRoute.name === 'screener') renderScreener();
   else if (currentRoute.name === 'nearby') renderNearby();
   else if (currentRoute.name === 'ask') renderAsk();
   else if (currentRoute.name === 'saved') renderSaved();
@@ -469,7 +526,23 @@ document.addEventListener('input', event => {
 
 document.addEventListener('change', event => {
   if (event.target.id === 'sort') { state.sort = event.target.value; persist(); renderDiscover(); }
+  if (event.target.id === 'screenCategory') { state.screener = { ...state.screener, category: event.target.value }; persist(); renderScreener(); }
+  if (event.target.id === 'screenMinProtein') { state.screener = { ...state.screener, minProtein: event.target.value }; persist(); renderScreener(); }
+  if (event.target.id === 'screenMaxCalories') { state.screener = { ...state.screener, maxCalories: event.target.value }; persist(); renderScreener(); }
+  if (event.target.id === 'screenPrep') { state.screener = { ...state.screener, prep: event.target.value }; persist(); renderScreener(); }
+  if (event.target.id === 'screenSort') { state.screener = { ...state.screener, sort: event.target.value }; persist(); renderScreener(); }
+  if (event.target.matches('[data-screen-exclusion]')) {
+    const key = event.target.dataset.screenExclusion;
+    const exclusions = new Set(state.screener.exclusions);
+    event.target.checked ? exclusions.add(key) : exclusions.delete(key);
+    state.screener = { ...state.screener, exclusions: [...exclusions] };
+    persist(); renderScreener();
+  }
 });
+
+document.addEventListener('toggle', event => {
+  if (event.target.id === 'screenBuilder') state.screenerBuilderOpen = event.target.open;
+}, true);
 
 document.addEventListener('submit', event => {
   if (event.target.id === 'locationForm') {
@@ -519,6 +592,19 @@ document.addEventListener('click', event => {
   }
   const clearCompare = event.target.closest('[data-clear-compare]');
   if (clearCompare) { state.compare.clear(); persist(); render(); showToast('Comparison cleared'); return; }
+  const screenTemplate = event.target.closest('[data-screen-template]');
+  if (screenTemplate) { state.screener = productScreener.applyTemplate(screenTemplate.dataset.screenTemplate, screenerCategories); persist(); renderScreener(); liveRegion.textContent = `${screenTemplate.textContent} screen applied`; return; }
+  const screenReset = event.target.closest('[data-screen-reset]');
+  if (screenReset) { state.screener = productScreener.normalize({}, screenerCategories); persist(); renderScreener(); liveRegion.textContent = 'Screen cleared'; return; }
+  const removeScreenClause = event.target.closest('[data-remove-screen-clause]');
+  if (removeScreenClause) {
+    const key = removeScreenClause.dataset.removeScreenClause;
+    if (key.startsWith('exclude:')) state.screener = { ...state.screener, exclusions: state.screener.exclusions.filter(item => item !== key.slice(8)) };
+    else if (key === 'category') state.screener = { ...state.screener, category: 'All groceries' };
+    else if (key === 'prep') state.screener = { ...state.screener, prep: 'all' };
+    else state.screener = { ...state.screener, [key]: null };
+    persist(); renderScreener(); return;
+  }
   const quickSort = event.target.closest('[data-quick-sort]');
   if (quickSort) {
     state.sort = quickSort.dataset.quickSort;
