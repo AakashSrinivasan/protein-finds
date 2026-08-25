@@ -56,6 +56,7 @@ async function exerciseZipAndMap(browserType) {
   await page.waitForSelector('[data-store-marker]');
   await page.locator('[data-store-marker]').first().click();
   await page.waitForSelector('.map-wrap [data-store-card]');
+  assert.match(await page.locator('.sheet-heading').textContent(), /selected grocery store/i, 'selected marker exposes a labeled place sheet');
   assert.ok(await page.locator('.map-wrap .store-products a').count() > 0, 'marker sheet links to matching product details');
 
   const beforeSearch = await page.evaluate(() => window.ProteinFinds.state.location);
