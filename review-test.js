@@ -38,6 +38,24 @@ async function auditAxe(page, name, axeSource) {
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(element => getComputedStyle(element).position), 'fixed');
   pass('persistent-bottom-navigation', 'five focused grocery-loop destinations, including Nearby and Ask, remain fixed');
 
+  const firstCard = page.locator('[data-product-id]').first();
+  assert.equal(await firstCard.locator('.card-decision-strip > div').count(), 3, 'card exposes three decision metrics');
+  assert.equal(await firstCard.locator('[data-add]').isVisible(), true, 'card exposes an add-to-basket action');
+  pass('decision-card-hierarchy', 'each result presents protein, calories, seeded value, store context, details, and one clear basket action');
+  await firstCard.locator('[data-add]').click();
+  await page.waitForSelector('.toast:visible');
+  assert.match(await page.locator('.toast').textContent(), /added to basket/i);
+  assert.equal(await page.locator('.toast a[href="#basket"]').isVisible(), true);
+  await page.locator('.toast a[href="#basket"]').click();
+  await page.waitForSelector('[data-screen="basket"]:visible');
+  assert.equal(await page.locator('.basket-progress').isVisible(), true);
+  assert.equal(await page.locator('.basket-next a[href="#discover"]').isVisible(), true);
+  assert.equal(await page.locator('.basket-next a[href="#ask"]').isVisible(), true);
+  assert.equal(await page.locator('.basket-line a[href^="#product/"]').isVisible(), true);
+  pass('basket-continuation', 'confirmation toast links to a store-grouped basket with product detail, continue-shopping, and improve-basket paths');
+  await page.locator('[data-remove]').first().click();
+  await page.locator('[data-tab="discover"]').click();
+
   for (const tab of ['discover', 'nearby', 'ask', 'saved', 'basket']) {
     await page.locator(`[data-tab="${tab}"]`).click();
     await page.waitForSelector(`[data-screen="${tab}"]:visible`);
@@ -57,7 +75,9 @@ async function auditAxe(page, name, axeSource) {
   await page.locator('[data-product-id]').first().click();
   await auditAxe(page, 'mobile-product-detail', axeSource);
   assert.ok(await page.locator('[data-history-back]').isVisible(), 'product detail has a History/Back control');
-  pass('product-detail-navigation', 'exact deep link has a visible History/Back control');
+  assert.equal(await page.locator('.detail-primary-action').isVisible(), true, 'product detail exposes a dominant primary action');
+  assert.equal(await page.locator('.detail-actions .source-link').isVisible(), true, 'source verification remains visible but tertiary');
+  pass('product-detail-navigation', 'exact deep link has visible Back navigation, a dominant basket action, and a tertiary source-verification path');
 
   const smallTargets = await page.locator('button:visible,a:visible,input:visible,select:visible').evaluateAll(nodes => nodes.map(node => {
     const box = node.getBoundingClientRect();

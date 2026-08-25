@@ -4,6 +4,7 @@ const groceryIds = new Set(groceryProducts.map(product => product.id));
 const locationData = window.PROTEIN_LOCATION;
 const app = document.querySelector('#appMain');
 const liveRegion = document.querySelector('#liveRegion');
+const toastRegion = document.querySelector('#toastRegion');
 const { answerAsk } = window.AskProtein;
 const storageKey = 'protein-finds-shell-state-v1';
 const scrollKey = 'protein-finds-scroll-v1';
@@ -44,6 +45,7 @@ const state = {
 let currentRoute = null;
 let deferredInstallPrompt = null;
 let nearbyMap = null;
+let toastTimer = null;
 
 const money = value => `$${Number(value).toFixed(2)}`;
 const byId = id => groceryProducts.find(product => product.id === id);
@@ -92,6 +94,17 @@ function navigate(hash) {
   location.hash = target;
 }
 
+function showToast(message, action = null) {
+  clearTimeout(toastTimer);
+  liveRegion.textContent = message;
+  toastRegion.innerHTML = `<div class="toast" role="status"><span>${escapeHtml(message)}</span>${action ? `<a href="${action.href}">${escapeHtml(action.label)}</a>` : ''}<button type="button" data-dismiss-toast aria-label="Dismiss notification">×</button></div>`;
+  toastRegion.dataset.visible = 'true';
+  toastTimer = setTimeout(() => {
+    toastRegion.dataset.visible = 'false';
+    toastRegion.innerHTML = '';
+  }, 4200);
+}
+
 function imageMarkup(product, detail = false) {
   if (!product.image) {
     return `<div class="image-needed" data-image-needed><b>Image needed</b><small>No exact licensed image is attached to this variant.</small></div>`;
@@ -103,16 +116,19 @@ function imageMarkup(product, detail = false) {
 function productCard(product) {
   const saved = state.saved.has(product.id);
   const nearby = nearestStoreForProduct(product);
+  const inBasket = state.basket.includes(product.id);
+  const value = hasKnownPrice(product) ? money(product.pricePer25) : 'Price unknown';
   return `<article class="product-card" data-product-id="${product.id}">
     <div class="product-media">${imageMarkup(product)}</div>
     <div class="product-copy">
-      <p class="decision-verdict"><b>${productVerdict(product)}</b><span>Why it ranks: ${rankingReason(product)}</span></p>
+      <p class="decision-verdict"><b>${productVerdict(product)}</b></p>
       <h2><a class="product-link" href="#product/${product.id}">${product.name}</a></h2>
       <p class="brand-line">${product.brand} · ${product.category}</p>
-      <div class="metrics"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div></div>
-      <div class="decision-grid"><span class="decision-price">${priceLabel(product)}</span><span class="decision-store">${product.stores[0] || 'Store unknown'}</span></div>
-      <p class="decision-freshness">${product.availabilityLabel} · checked Aug 13</p>
+      <div class="card-decision-strip"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div class="decision-price"><b>${value}</b><span>seeded / 25g</span></div></div>
+      <p class="decision-store"><b>${product.stores[0] || 'Store unknown'}</b> · ${product.availabilityLabel}</p>
+      <p class="decision-freshness">Checked Aug 13 · inventory not live</p>
       ${nearby ? `<p class="nearby-product"><b>${nearby.name}</b> · ${nearby.distanceMiles.toFixed(1)} mi · inventory not checked</p>` : ''}
+      <div class="card-actions"><a class="secondary" href="#product/${product.id}">Details</a><button class="primary" type="button" data-add="${product.id}" ${inBasket ? 'disabled' : ''}>${inBasket ? 'In basket' : 'Add to basket'}</button></div>
     </div>
     <button class="save-button" type="button" data-save="${product.id}" aria-label="${saved ? 'Remove' : 'Save'} ${product.name}" aria-pressed="${saved}">${saved ? '♥' : '♡'}</button>
   </article>`;
@@ -198,7 +214,7 @@ function mapMarkup(stores) {
     <div class="store-map" id="storeMap" data-store-map aria-label="Interactive geographic map of ${stores.length} grocery stores"></div>
     <button class="map-recenter" type="button" data-map-recenter aria-label="Recenter map on ${state.location ? state.location.label : 'Downtown San Jose'}">◎</button>
     <button class="primary search-here" type="button" data-search-here ${state.mapMoved ? '' : 'disabled'}>Search this area</button>
-    <div class="map-store-sheet">${selectedIndex >= 0 ? storeCard(stores[selectedIndex], selectedIndex) : '<p>Tap a grocery marker to see its products and store details.</p>'}</div>
+    <div class="map-store-sheet" aria-live="polite">${selectedIndex >= 0 ? `<div class="sheet-heading"><span aria-hidden="true"></span><b>Selected grocery store</b></div>${storeCard(stores[selectedIndex], selectedIndex)}` : '<p>Tap a grocery marker to compare distance, catalog matches, and product details.</p>'}</div>
     <p class="map-fallback">© OpenStreetMap contributors · store coordinates are seeded fixtures · proximity never means in stock.</p>
   </div>`;
 }
@@ -326,7 +342,7 @@ function renderProduct(id) {
         <div class="detail-decision"><span><b>${priceLabel(product)}</b><small>not a live price</small></span><span><b>${product.stores[0] || 'Store unknown'}</b><small>${product.availabilityLabel} · checked Aug 13</small></span></div>
         <p>${product.blurb}</p><p><b>Best use:</b> ${product.use}</p><p><b>Trade-off:</b> ${product.tradeoff}</p>
         <div class="truth-note"><b>Seeded demo record.</b> Nutrition, price and availability are not a current exact-SKU claim. Verify the linked current source before buying.</div>
-        <div class="detail-actions"><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save product'}</button><button class="primary" type="button" data-add="${product.id}">${state.basket.includes(product.id) ? 'In basket' : 'Add to basket'}</button><a class="secondary" target="_blank" rel="noopener" href="${product.source}">Open source</a><a class="secondary" href="#basket">View basket</a></div>
+        <div class="detail-actions"><button class="primary detail-primary-action" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added to basket' : 'Add to basket'}</button><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save product'}</button><a class="secondary" href="#basket">View basket</a><a class="source-link" target="_blank" rel="noopener" href="${product.source}">Verify current source ↗</a></div>
         ${imageCredit}
       </div>
     </article>
@@ -350,10 +366,10 @@ function renderBasket() {
   const prompts = `<aside class="missing-categories" data-missing-categories><b>${missing.length ? 'Round out the trip' : 'Core trip categories covered'}</b><p>Trip ideas, not nutrition requirements. ${missing.length ? `You may still want ${missing.map(group => group.label).join(', ')}.` : 'This demo basket includes a main, breakfast, dairy or drink, and snack.'}</p></aside>`;
   const storeGroups = Object.entries(groups).map(([store, storeItems]) => {
     const categories = storeItems.reduce((result, product) => { (result[product.category] ||= []).push(product); return result; }, {});
-    return `<section class="basket-store"><h2>${store}</h2>${Object.entries(categories).map(([category, categoryItems]) => `<div class="basket-category"><h3>${category}</h3>${categoryItems.map(product => `<div class="basket-line"><div><b>${product.name}</b><small>${product.protein}g · ${hasKnownPrice(product) ? `~${money(product.price / product.servings)} seeded / serving` : 'price unknown'}</small></div><button type="button" data-remove="${product.id}" aria-label="Remove ${product.name}">Remove</button></div>`).join('')}</div>`).join('')}</section>`;
+    return `<section class="basket-store"><h2>${store}</h2>${Object.entries(categories).map(([category, categoryItems]) => `<div class="basket-category"><h3>${category}</h3>${categoryItems.map(product => `<div class="basket-line"><div><a href="#product/${product.id}"><b>${product.name}</b></a><small>${product.protein}g · ${hasKnownPrice(product) ? `~${money(product.price / product.servings)} seeded / serving` : 'price unknown'}</small></div><button type="button" data-remove="${product.id}" aria-label="Remove ${product.name}">Remove</button></div>`).join('')}</div>`).join('')}</section>`;
   }).join('');
   const subtotal = unknownPriceCount ? `${money(totalCost)} known + ${unknownPriceCount} unknown` : money(totalCost);
-  app.innerHTML = `<section class="screen" data-screen="basket">${screenHead('Store-grouped trip', 'Grocery basket', 'Your saved trip, grouped for the store. Prices and inventory still require a current check.')}${items.length ? `${storeGroups}${prompts}<div class="basket-total"><span>Seeded one-serving subtotal</span><br><b>${totalProtein}g · ${subtotal}</b><p>No order or payment is submitted.</p></div>` : `<div class="empty-card"><span class="state-icon">▣</span><h2>Your basket is empty</h2><p>Add grocery products from Discover. Your trip stays on this device.</p><a class="primary" href="#discover">Find products</a></div>`}</section>`;
+  app.innerHTML = `<section class="screen" data-screen="basket">${screenHead('Store-grouped trip', 'Grocery basket', 'Your saved trip, grouped for the store. Prices and inventory still require a current check.')}${items.length ? `<div class="basket-progress"><b>${items.length} products across ${Object.keys(groups).length} ${Object.keys(groups).length === 1 ? 'store' : 'stores'}</b><span>Use this as your store plan; Protein Finds does not submit an order.</span></div>${storeGroups}${prompts}<div class="basket-total"><span>Seeded one-serving subtotal</span><br><b>${totalProtein}g · ${subtotal}</b><p>No order or payment is submitted.</p></div><div class="basket-next"><div><b>Keep building this trip</b><span>Add another category or ask the catalog agent to inspect what is missing.</span></div><a class="primary" href="#discover">Continue shopping</a><a class="secondary" href="#ask">Improve my basket</a></div>` : `<div class="empty-card"><span class="state-icon">▣</span><h2>Your basket is empty</h2><p>Add grocery products from Discover. Your trip stays on this device.</p><a class="primary" href="#discover">Find products</a></div>`}</section>`;
 }
 
 function render() {
@@ -413,13 +429,24 @@ document.addEventListener('click', event => {
   const save = event.target.closest('[data-save]');
   if (save) {
     event.stopPropagation();
-    state.saved.has(save.dataset.save) ? state.saved.delete(save.dataset.save) : state.saved.add(save.dataset.save);
-    persist(); render(); return;
+    const product = byId(save.dataset.save);
+    const wasSaved = state.saved.has(save.dataset.save);
+    wasSaved ? state.saved.delete(save.dataset.save) : state.saved.add(save.dataset.save);
+    persist(); render(); showToast(`${product?.name || 'Product'} ${wasSaved ? 'removed from saved' : 'saved'}`); return;
   }
   const add = event.target.closest('[data-add]');
-  if (add) { if (!state.basket.includes(add.dataset.add)) state.basket.push(add.dataset.add); persist(); render(); liveRegion.textContent = 'Added to basket'; return; }
+  if (add) {
+    const product = byId(add.dataset.add);
+    if (!state.basket.includes(add.dataset.add)) {
+      state.basket.push(add.dataset.add); persist(); render();
+      showToast(`${product?.name || 'Product'} added to basket`, { href: '#basket', label: 'View basket' });
+    } else showToast(`${product?.name || 'Product'} is already in your basket`, { href: '#basket', label: 'View basket' });
+    return;
+  }
   const remove = event.target.closest('[data-remove]');
-  if (remove) { state.basket = state.basket.filter(id => id !== remove.dataset.remove); persist(); renderBasket(); return; }
+  if (remove) { const product = byId(remove.dataset.remove); state.basket = state.basket.filter(id => id !== remove.dataset.remove); persist(); renderBasket(); showToast(`${product?.name || 'Product'} removed from basket`); return; }
+  const dismissToast = event.target.closest('[data-dismiss-toast]');
+  if (dismissToast) { clearTimeout(toastTimer); toastRegion.dataset.visible = 'false'; toastRegion.innerHTML = ''; return; }
   const category = event.target.closest('[data-category]');
   if (category) { state.category = category.dataset.category; persist(); renderDiscover(); return; }
   const askPrompt = event.target.closest('[data-ask-prompt]');

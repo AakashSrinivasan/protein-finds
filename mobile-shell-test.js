@@ -76,8 +76,8 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
 
   await page.fill('#search', '');
   await page.locator('[data-product-id]').first().locator('[data-save]').click();
-  await page.locator('[data-product-id]').first().click();
-  await page.locator('[data-add]').click();
+  await page.locator('[data-product-id]').first().locator('.product-link').click();
+  await page.locator('.detail-card [data-add]').click();
   await page.locator('[data-tab="basket"]').click();
   await page.waitForSelector('[data-screen="basket"] .basket-line');
   assert.ok(await page.locator('[data-missing-categories]').isVisible(), `${label}: grocery trip shows non-medical missing-category prompts`);
