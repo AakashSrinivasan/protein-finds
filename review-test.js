@@ -69,6 +69,14 @@ async function auditAxe(page, name, axeSource) {
   assert.equal(await page.locator('[data-compare-product]').count(), 2, 'comparison renders selected products only');
   assert.equal(await page.locator('.compare-scroll').count(), 0, 'comparison has no hidden horizontal comparison gesture');
   assert.equal(await page.locator('.compare-recommendation').count(), 1, 'comparison leads with one overall recommendation');
+  assert.equal(await page.locator('.compare-recommendation').getAttribute('data-recommendation-id'), 'egg-whites', 'balanced recommendation agrees with visible metric wins');
+  assert.match(await page.locator('.compare-recommendation').textContent(), /wins 3 of 4 visible metrics/i, 'recommendation explains its evidence');
+  const compareType = await page.evaluate(() => ({
+    header: parseFloat(getComputedStyle(document.querySelector('.compare-matrix-head a')).fontSize),
+    label: parseFloat(getComputedStyle(document.querySelector('.compare-matrix-row > b')).fontSize),
+    winner: parseFloat(getComputedStyle(document.querySelector('.compare-matrix-row i')).fontSize)
+  }));
+  assert.ok(compareType.header >= 12 && compareType.label >= 11 && compareType.winner >= 9, 'comparison labels use readable mobile typography');
   assert.equal(await page.locator('.compare-thumb [data-image-needed]').count(), 2, 'missing package images collapse into compact identity tiles');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, 'comparison fits the phone viewport without body overflow');
   pass('comparison-loop', 'two products fit a mobile-native metric matrix, recommendation, compact truth states, trade-offs, and basket actions');

@@ -24,9 +24,11 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(el => getComputedStyle(el).position), 'fixed', `${label}: bottom nav stays fixed`);
   assert.ok(await page.locator('[data-featured-id]').first().boundingBox().then(box => box && box.y < viewport.height), `${label}: featured product is in first viewport`);
   const featuredCopy = await page.locator('[data-featured-id]').first().locator('.featured-copy').boundingBox();
+  const featuredAction = await page.locator('[data-featured-id]').first().locator('[data-add]').boundingBox();
   const navigationBox = await page.locator('[data-bottom-nav]').boundingBox();
   assert.ok(featuredCopy && navigationBox && featuredCopy.y < navigationBox.y, `${label}: product name and decision metrics begin above navigation`);
-  assert.ok(await page.locator('.freshness').isVisible(), `${label}: demo/not-live data status remains visible`);
+  assert.ok(featuredAction && navigationBox && featuredAction.y + featuredAction.height <= navigationBox.y, `${label}: first recommendation action is fully visible above navigation`);
+  assert.ok(await page.locator('.surface-truth').isVisible(), `${label}: demo/not-live source context remains available through progressive disclosure`);
   const firstImage = page.locator('[data-featured-id]').first().locator('[data-product-image]');
   assert.equal(await firstImage.getAttribute('data-image-license'), 'CC BY-SA 3.0', `${label}: first card uses licensed exact package image`);
   assert.ok(await firstImage.getAttribute('data-upc'), `${label}: visible image is tied to a UPC`);

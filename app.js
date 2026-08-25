@@ -55,6 +55,12 @@ const priceLabel = product => hasKnownPrice(product) ? `${money(product.price)} 
 const productVerdict = product => product.role === 'anchor' ? 'Strong main protein' : 'Useful supporting pick';
 const rankingReason = product => `${product.protein}g protein / ${product.calories} cal.`;
 const scoreProduct = product => product.efficiency * 5 + product.protein * 1.5 - (hasKnownPrice(product) ? product.pricePer25 : 0) + (product.role === 'anchor' ? 12 : 0);
+const goalDefinitions = Object.freeze({
+  recommended: { short: 'Best fit', title: 'Balanced shelf', reason: 'Balances protein, calories, value, and usefulness across a grocery trip.' },
+  protein: { short: 'Protein', title: 'Highest protein first', reason: 'Ranks protein grams from highest to lowest.' },
+  efficiency: { short: 'Lean', title: 'Most protein per calorie', reason: 'Ranks grams of protein per 100 calories.' },
+  price: { short: 'Value', title: 'Lowest recorded cost', reason: 'Ranks known cost per 25g of protein; unknown prices follow.' }
+});
 const routeKey = route => route.name === 'product' ? `product/${route.id}` : route.name;
 
 function persist() {
@@ -286,7 +292,7 @@ function featuredCard(product, index, goal) {
   const label = index === 0 ? `${goal.short} leader` : `#${index + 1} for ${goal.short.toLowerCase()}`;
   return `<article class="featured-card" data-featured-id="${product.id}">
     <a class="featured-media" href="#product/${product.id}" aria-label="View ${product.name}">${imageMarkup(product)}</a>
-    <div class="featured-copy"><span>${label}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><div><b>${product.protein}g</b><small>protein</small><b>${product.calories}</b><small>cal</small></div></div>
+    <div class="featured-copy"><div class="featured-info"><span>${label}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><div class="featured-metrics"><b>${product.protein}g</b><small>protein</small><b>${product.calories}</b><small>cal</small></div><p class="featured-tradeoff"><b>Trade-off:</b> ${product.tradeoff}</p></div><div class="featured-actions"><a class="secondary" href="#product/${product.id}">Details</a><button class="secondary" type="button" data-compare="${product.id}" aria-pressed="${state.compare.has(product.id)}">${state.compare.has(product.id) ? 'Comparing' : 'Compare'}</button><button class="primary" type="button" data-add="${product.id}" aria-label="Add ${product.name} to basket" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added' : 'Add'}</button></div></div>
   </article>`;
 }
 
@@ -298,13 +304,7 @@ function compareTrayMarkup() {
 
 function renderDiscover() {
   const list = filteredProducts();
-  const goals = {
-    recommended: { short: 'Best fit', title: 'Balanced shelf', reason: 'Balances protein, efficiency, role, value evidence, and exact imagery.' },
-    protein: { short: 'Protein', title: 'Highest protein first', reason: 'Ranks seeded protein grams from highest to lowest.' },
-    efficiency: { short: 'Lean', title: 'Most protein per calorie', reason: 'Ranks grams of protein per 100 seeded calories.' },
-    price: { short: 'Value', title: 'Lowest seeded cost', reason: 'Ranks known seeded cost per 25g; unknown prices follow.' }
-  };
-  const goal = goals[state.sort] || goals.recommended;
+  const goal = goalDefinitions[state.sort] || goalDefinitions.recommended;
   const featured = list.slice(0, 3);
   const leader = list[0];
   const categories = Object.keys(categoryFilters);
@@ -312,11 +312,11 @@ function renderDiscover() {
   let content;
   if (['loading', 'error'].includes(forcedState)) content = stateMarkup(forcedState);
   else if (forcedState === 'empty' || !list.length) content = stateMarkup('empty');
-  else content = `${['offline', 'stale'].includes(forcedState) ? stateMarkup(forcedState) : ''}<p class="results-meta">${list.length} seeded products · exact package images only where rights and variant identity are recorded</p><div class="product-list">${list.map(productCard).join('')}</div>`;
+  else content = `${['offline', 'stale'].includes(forcedState) ? stateMarkup(forcedState) : ''}<p class="results-meta">${list.length} grocery options</p><div class="product-list">${list.map(productCard).join('')}</div>`;
   app.innerHTML = `<section class="screen discover-screen" data-screen="discover">
-    <section class="discover-hero"><div class="hero-orbit" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">Vegetarian protein, decoded</p><h1 id="screenTitle">Build a better<br><em>grocery run.</em></h1><p>Choose a goal and see the shelf, shortlist, and current leader change together.</p><div class="hero-actions" aria-label="Shopping goal">${[['protein','Most protein'],['efficiency','Leanest picks'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>${leader ? `<div class="hero-leader" aria-live="polite"><span>${goal.title}</span><b>${leader.name}</b><small>${leader.protein}g protein · ${leader.calories} cal · ${hasKnownPrice(leader) ? `${money(leader.pricePer25)} seeded / 25g` : 'price unknown'}</small></div>` : ''}</section>
+    <section class="discover-hero"><div class="hero-orbit" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">Vegetarian protein, decoded</p><h1 id="screenTitle">Build a better <br><em>grocery run.</em></h1><p>Choose what matters, compare the strongest options, and build the trip.</p><div class="hero-actions" aria-label="Shopping goal">${[['protein','Most protein'],['efficiency','Leanest picks'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>${leader ? `<div class="hero-leader" aria-live="polite"><span>${goal.title}</span><b>${leader.name}</b><small>${leader.protein}g protein · ${leader.calories} cal · ${hasKnownPrice(leader) ? `${money(leader.pricePer25)} value / 25g` : 'price unknown'}</small></div>` : ''}</section>
     ${featured.length ? `<section class="featured-section"><div class="section-title"><div><p class="eyebrow">Goal-matched shortlist</p><h2>${goal.title}</h2><small>${goal.reason}</small></div><span>Swipe →</span></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : ''}
-    <div class="freshness compact-freshness">Demo records · seeded 2026-08-13 · not live price or inventory</div>
+    <details class="surface-truth"><summary>About these results</summary><p>Demo catalog recorded Aug 13, 2026. Prices and inventory are not live; exact package photos appear only when the variant and rights are known.</p></details>
     <div class="discovery-tools">
       <label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" value="${state.search.replaceAll('"', '&quot;')}" aria-label="Search products" placeholder="Search products"></label>
       <select id="sort" aria-label="Sort products"><option value="recommended">Best fit</option><option value="protein">Protein</option><option value="efficiency">Efficiency</option><option value="price">Seed price</option></select>
@@ -379,6 +379,30 @@ function renderProduct(id) {
   </section>`;
 }
 
+function comparisonDecision(items) {
+  const metricDefinitions = [
+    { key: 'protein', label: 'protein', best: Math.max(...items.map(product => product.protein)), value: product => product.protein },
+    { key: 'calories', label: 'calories', best: Math.min(...items.map(product => product.calories)), value: product => product.calories },
+    { key: 'value', label: 'value', best: Math.min(...items.filter(hasKnownPrice).map(product => product.pricePer25)), value: product => hasKnownPrice(product) ? product.pricePer25 : null },
+    { key: 'efficiency', label: 'efficiency', best: Math.max(...items.map(product => product.efficiency)), value: product => product.efficiency }
+  ];
+  const winsFor = product => metricDefinitions.filter(metric => Number.isFinite(metric.best) && metric.value(product) === metric.best);
+  const balanced = [...items].sort((a, b) => winsFor(b).length - winsFor(a).length || b.protein - a.protein)[0];
+  const criterion = {
+    protein: { label: 'Most protein goal', product: [...items].sort((a, b) => b.protein - a.protein)[0], proof: product => `${product.protein}g protein is the highest shown.` },
+    efficiency: { label: 'Leanest picks goal', product: [...items].sort((a, b) => b.efficiency - a.efficiency)[0], proof: product => `${product.efficiency}g protein per 100 calories is the highest shown.` },
+    price: { label: 'Best value goal', product: [...items].filter(hasKnownPrice).sort((a, b) => a.pricePer25 - b.pricePer25)[0], proof: product => `${money(product.pricePer25)} per 25g protein is the lowest known value shown.` }
+  }[state.sort];
+  const activeCriterion = criterion?.product ? criterion : null;
+  const product = activeCriterion?.product || balanced;
+  const wins = winsFor(product);
+  const evidence = wins.map(metric => metric.label);
+  const explanation = activeCriterion
+    ? `${activeCriterion.proof(product)} It wins ${wins.length} of ${metricDefinitions.length} visible metrics overall.`
+    : `${product.name} wins ${wins.length} of ${metricDefinitions.length} visible metrics: ${evidence.join(', ')}.`;
+  return { product, label: activeCriterion?.label || 'Visible-metric winner', explanation, evidence, metrics: metricDefinitions };
+}
+
 function renderCompare() {
   const items = [...state.compare].map(byId).filter(Boolean);
   if (items.length < 2) {
@@ -389,9 +413,10 @@ function renderCompare() {
   const lowestCalories = Math.min(...items.map(product => product.calories));
   const knownValues = items.filter(hasKnownPrice).map(product => product.pricePer25);
   const lowestValue = knownValues.length ? Math.min(...knownValues) : null;
-  const recommended = [...items].sort((a, b) => scoreProduct(b) - scoreProduct(a))[0];
+  const decision = comparisonDecision(items);
+  const recommended = decision.product;
   const matrixRow = (label, value, winner) => `<div class="compare-matrix-row"><b>${label}</b>${items.map(product => `<span ${winner(product) ? 'data-winner="true"' : ''}>${value(product)}${winner(product) ? '<i>Best</i>' : ''}</span>`).join('')}</div>`;
-  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="#discover">← Back to Discover</a>${screenHead('Side-by-side decision', 'Pick the basket winner', 'A phone-sized decision summary first; exact product detail follows without a hidden sideways gesture.')}<aside class="compare-recommendation"><span>Best balanced pick from these records</span><h2>${recommended.name}</h2><p>${recommended.protein}g protein at ${recommended.calories} calories. ${recommended.use}</p><a class="primary" href="#product/${recommended.id}">Review recommendation</a></aside><div class="compare-matrix" style="--compare-count:${items.length}"><div class="compare-matrix-head"><b>Metric</b>${items.map(product => `<a href="#product/${product.id}">${product.name}</a>`).join('')}</div>${matrixRow('Protein', product => `${product.protein}g`, product => product.protein === highestProtein)}${matrixRow('Calories', product => product.calories, product => product.calories === lowestCalories)}${matrixRow('Value / 25g', product => hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', product => lowestValue !== null && product.pricePer25 === lowestValue)}${matrixRow('Efficiency', product => product.efficiency, product => product.efficiency === Math.max(...items.map(item => item.efficiency)))}</div><div class="compare-pick-list">${items.map(product => `<article class="compare-pick" data-compare-product="${product.id}"><button type="button" data-compare="${product.id}" aria-label="Remove ${product.name} from comparison">×</button><a class="compare-thumb" href="#product/${product.id}" aria-label="Open ${escapeHtml(product.name)} details">${imageMarkup(product)}</a><div class="compare-pick-copy"><p class="eyebrow">${productVerdict(product)}</p><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><dl><div><dt>Best use</dt><dd>${product.use}</dd></div><div><dt>Trade-off</dt><dd>${product.tradeoff}</dd></div></dl><button class="primary" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></div></article>`).join('')}</div><aside class="compare-footnote">Best labels compare only these selected seeded records. Price and inventory are not live.</aside></section>`;
+  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="#discover">← Back to Discover</a>${screenHead('Side-by-side decision', 'Pick the basket winner', 'A phone-sized decision summary first; exact product detail follows without a hidden sideways gesture.')}<aside class="compare-recommendation" data-recommendation-id="${recommended.id}" data-recommendation-goal="${state.sort}"><span>${decision.label}</span><h2>${recommended.name}</h2><p>${decision.explanation}</p><div class="recommendation-evidence" aria-label="Visible metric wins">${decision.evidence.map(metric => `<b>Best ${metric}</b>`).join('')}</div><a class="primary" href="#product/${recommended.id}">Review recommendation</a></aside><div class="compare-matrix" style="--compare-count:${items.length}"><div class="compare-matrix-head"><b>Metric</b>${items.map(product => `<a href="#product/${product.id}">${product.name}</a>`).join('')}</div>${matrixRow('Protein', product => `${product.protein}g`, product => product.protein === highestProtein)}${matrixRow('Calories', product => product.calories, product => product.calories === lowestCalories)}${matrixRow('Value / 25g', product => hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', product => lowestValue !== null && product.pricePer25 === lowestValue)}${matrixRow('Efficiency', product => product.efficiency, product => product.efficiency === Math.max(...items.map(item => item.efficiency)))}</div><div class="compare-pick-list">${items.map(product => `<article class="compare-pick" data-compare-product="${product.id}"><button type="button" data-compare="${product.id}" aria-label="Remove ${product.name} from comparison">×</button><a class="compare-thumb" href="#product/${product.id}" aria-label="Open ${escapeHtml(product.name)} details">${imageMarkup(product)}</a><div class="compare-pick-copy"><p class="eyebrow">${productVerdict(product)}</p><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><dl><div><dt>Best use</dt><dd>${product.use}</dd></div><div><dt>Trade-off</dt><dd>${product.tradeoff}</dd></div></dl><button class="primary" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></div></article>`).join('')}</div><aside class="compare-footnote">Best labels compare only these selected seeded records. Price and inventory are not live.</aside></section>`;
 }
 
 function renderBasket() {
