@@ -35,7 +35,7 @@ async function exerciseZipAndMap(browserType) {
   assert.ok(await page.locator('[data-map-recenter]').isVisible(), 'recenter control renders');
   assert.ok(await page.locator('[data-search-here]').isDisabled(), 'Search this area stays hidden until map movement');
 
-  await page.fill('#zipInput', '95113');
+  await page.fill('#zipInput', '94404');
   await page.locator('#locationForm button[type="submit"]').click();
   await page.waitForSelector('[data-location-puck]');
   assert.equal(await page.locator('[data-store-marker]').count(), 4);
@@ -47,17 +47,27 @@ async function exerciseZipAndMap(browserType) {
   const numericDistances = distances.map(value => Number.parseFloat(value));
   assert.deepEqual(numericDistances, [...numericDistances].sort((a, b) => a - b), 'stores are ordered by deterministic distance');
   const availability = (await page.locator('[data-store-results]').textContent()).toLowerCase();
-  assert.match(availability, /inventory not checked/);
+  assert.match(availability, /unknown inventory/);
   assert.doesNotMatch(availability, /in stock/);
+  assert.equal(await page.locator('[data-store-results] .store-handoff').count(), 4, 'every Foster City retailer exposes an execution handoff');
+  assert.equal(await page.locator('[data-store-results] .store-handoff').evaluateAll(links => links.every(link => /^https:\/\//.test(link.href))), true);
   await assertNoAxeViolations(page, `${browserType.name()} list`);
   if (browserType.name() === 'chromium') await page.screenshot({ path: path.join(artifactDir, 'location-list-390x844.png'), fullPage: false });
 
-  await page.locator('[data-location-view="map"]').click();
-  await page.waitForSelector('[data-store-marker]');
-  await page.locator('[data-store-marker]').first().click();
-  await page.waitForSelector('.map-wrap [data-store-card]');
-  assert.match(await page.locator('.sheet-heading').textContent(), /selected grocery store/i, 'selected marker exposes a labeled place sheet');
-  assert.ok(await page.locator('.map-wrap .store-products a').count() > 0, 'marker sheet links to matching product details');
+  const targetCard = page.locator('[data-store-results][data-view="list"] [data-store-card="target-bridgepointe-san-mateo"]');
+  assert.match(await targetCard.locator('.store-tags').textContent(), /3 exact SKU paths/i);
+  assert.match(await targetCard.locator('.store-products a').first().textContent(), /Plant-Based Seared Tips/i, 'connected exact item leads the Target shortlist');
+  await targetCard.locator('[data-select-store]').click();
+  await page.waitForSelector('[data-store-map][data-selected-store="target-bridgepointe-san-mateo"]');
+  assert.equal(await page.locator('[data-store-results]').getAttribute('data-view'), 'map', 'canonical list selector opens the synchronized map');
+  const selectedMarker = page.locator('[data-store-marker="target-bridgepointe-san-mateo"]');
+  assert.equal(await selectedMarker.getAttribute('aria-current'), 'true', 'selected retailer marker is highlighted');
+  assert.match(await selectedMarker.getAttribute('class'), /is-selected/);
+  assert.ok(Math.abs(Number(await page.locator('[data-store-map]').getAttribute('data-center-lat')) - 37.5586167) < 0.00001, 'map pans to selected store latitude');
+  assert.ok(Math.abs(Number(await page.locator('[data-store-map]').getAttribute('data-center-lon')) - -122.2832601) < 0.00001, 'map pans to selected store longitude');
+  await page.waitForSelector('.map-wrap [data-store-card="target-bridgepointe-san-mateo"]');
+  assert.match(await page.locator('.sheet-heading').textContent(), /selected grocery store/i, 'selected list retailer opens the shared detail sheet');
+  assert.match(await page.locator('.map-wrap .store-products a').first().textContent(), /Plant-Based Seared Tips/i);
 
   const beforeSearch = await page.evaluate(() => window.ProteinFinds.state.location);
   await page.locator('.leaflet-control-zoom-in').click();
@@ -108,7 +118,7 @@ async function exerciseZipAndMap(browserType) {
 
   const grantedContext = await browser.newContext({
     viewport: { width: 390, height: 844 },
-    geolocation: { latitude: 37.3337, longitude: -121.8907 },
+    geolocation: { latitude: 37.5609851, longitude: -122.2651076 },
     permissions: ['geolocation']
   });
   const grantedPage = await grantedContext.newPage();
@@ -118,7 +128,7 @@ async function exerciseZipAndMap(browserType) {
   await grantedPage.waitForSelector('[data-location-status="ready"]');
   assert.equal(await grantedPage.locator('.location-heading > b').textContent(), 'Current location');
   assert.deepEqual(await grantedPage.evaluate(() => window.ProteinFinds.state.location), {
-    lat: 37.3337, lon: -121.8907, label: 'Current location'
+    lat: 37.5609851, lon: -122.2651076, label: 'Current location'
   }, 'granted coordinates drive the same deterministic store results');
   assert.equal(await grantedPage.locator('[data-store-marker]').count(), 4);
   assert.equal(await grantedPage.locator('[data-location-puck]').count(), 1, 'current location is visible as a puck on the map');

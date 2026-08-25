@@ -22,15 +22,42 @@ const PRODUCT_META={
   'fairlife-fat-free':{family:'Fast breakfast anchors',useCases:['breakfast','snack','travel'],simple:true},
   'egglife-original':{family:'Egg-based breakfast anchors',useCases:['breakfast','meal','travel'],simple:true},
   'oikos-pro':{family:'Cultured dairy anchors',useCases:['breakfast','snack','travel'],simple:false},
-  'boca-original':{family:'BOCA burger variants',useCases:['meal'],simple:false},
+  'boca-original':{
+    family:'BOCA burger variants',useCases:['meal'],simple:false,
+    exactSku:{
+      variant:'Original Vegan Veggie Burgers',size:'10 oz',upc:'0759283334455',servingSize:'1 burger (71g)',servingsPerPackage:4,
+      dietaryLabels:['Vegan'],allergens:['Soy','Wheat','Sesame'],
+      nutritionSourceUrl:'https://world.openfoodfacts.org/product/0759283334455/original-vegan-veggie-burgers-boca',nutritionCheckedAt:'2026-08-25',
+      retailerHandoffs:[{type:'retailer-search',storeId:'target-bridgepointe-san-mateo',retailer:'Target',label:'Search Target',url:'https://www.target.com/s?searchTerm=0759283334455%20Original%20Vegan%20Veggie%20Burgers',checkedAt:'2026-08-25'}]
+    }
+  },
   'boca-american':{family:'BOCA burger variants',useCases:['meal'],simple:false},
-  'beyond-steak':{family:'Plant-meat mains',useCases:['meal'],simple:false},
+  'beyond-steak':{
+    family:'Plant-meat mains',useCases:['meal'],simple:false,
+    exactSku:{
+      variant:'Plant-Based Seared Tips',size:'10 oz',upc:'0810057290831',servingSize:'3.5 oz (100g)',servingsPerPackage:2.5,
+      dietaryLabels:['Vegan','Soy-free'],allergens:['Wheat'],
+      nutritionSourceUrl:'https://www.beyondmeat.com/en-US/products/beyond-steak',nutritionCheckedAt:'2026-08-13',
+      retailerHandoffs:[
+        {type:'exact-product',retailer:'Safeway on Instacart',label:'Check Safeway on Instacart',url:'https://www.instacart.com/products/27918479-beyond-steak-plant-based-seared-tips-original-10-oz?retailerSlug=safeway',checkedAt:'2026-08-25',availabilityStatus:'unknown',priceStatus:'unknown',detail:'Exact 10 oz order page; location, price and inventory are personalized after location or login.'},
+        {type:'retailer-search',storeId:'target-bridgepointe-san-mateo',retailer:'Target',label:'Search Target',url:'https://www.target.com/s?searchTerm=0810057290831',checkedAt:'2026-08-25'}
+      ]
+    }
+  },
   'magic-spoon':{family:'Fast breakfast anchors',useCases:['breakfast','snack'],simple:false},
   'impossible-beef':{family:'Plant-meat mains',useCases:['meal'],simple:false},
   'starbucks-bites':{family:'Restaurant breakfast builds',useCases:['breakfast','snack','travel'],simple:false,restaurantBuild:'Order the Egg White & Roasted Red Pepper Bites as listed; pair with another anchor if the meal target exceeds 12g.'},
   'chipotle-black-beans':{family:'Chipotle protein build',useCases:['meal','travel'],simple:true,restaurantBuild:'Add black beans to a bowl, salad or tacos; pair with sofritas for a seeded 16g combined protein example before other ingredients.'},
   'chipotle-sofritas':{family:'Chipotle protein build',useCases:['meal','travel'],simple:false,restaurantBuild:'Choose sofritas and add black beans for a seeded 16g combined protein example; re-check the restaurant calculator for the complete build.'},
-  'quest-cookie':{family:'Portable protein snacks',useCases:['snack','travel'],simple:false},
+  'quest-cookie':{
+    family:'Portable protein snacks',useCases:['snack','travel'],simple:false,
+    exactSku:{
+      variant:'Chocolate Chip Protein Cookie',size:'2.08 oz',upc:'0888849005994',servingSize:'1 cookie (59g)',servingsPerPackage:1,
+      dietaryLabels:['Vegetarian'],allergens:['Milk','Soy','Processed with egg, wheat, peanut and tree-nut equipment'],
+      nutritionSourceUrl:'https://world.openfoodfacts.org/product/0888849005994/protein-cookie-chocolate-chip-quest',nutritionCheckedAt:'2026-08-25',
+      retailerHandoffs:[{type:'retailer-search',storeId:'target-bridgepointe-san-mateo',retailer:'Target',label:'Search Target',url:'https://www.target.com/s?searchTerm=0888849005994%20Chocolate%20Chip%20Protein%20Cookie',checkedAt:'2026-08-25'}]
+    }
+  },
   'kodiak-waffles':{family:'Fast breakfast anchors',useCases:['breakfast'],simple:false},
   'impossible-whopper':{family:'Restaurant plant-meat meals',useCases:['meal','travel'],simple:false,restaurantBuild:'Order the menu item only if a full Whopper-style meal is the goal; ask the location about vegetarian preparation and cross-contact.'}
 };

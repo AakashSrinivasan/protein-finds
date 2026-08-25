@@ -4,15 +4,16 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "node --test catalog-contract.test.js catalog-import.test.js location-data.test.js ask-protein.test.js product-screener.test.js && node test-platform.js",
+    "test": "node --test catalog-contract.test.js catalog-import.test.js location-data.test.js ask-protein.test.js product-screener.test.js foster-city-data.test.js && node test-platform.js",
     "test:screener": "node --test product-screener.test.js",
     "test:ask": "node --test ask-protein.test.js",
     "test:contract": "node --test catalog-contract.test.js",
     "test:import": "node --test catalog-import.test.js",
     "test:shell": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node mobile-shell-test.js",
     "test:location": "node --test location-data.test.js && REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node location-browser-test.js",
+    "test:journey": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node foster-city-journey-test.js",
     "verify": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node review-test.js",
-    "test:pwa": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node pwa-test.js",
+    "test:pwa": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node pwa-test.js && node pwa-upgrade-test.js",
     "serve": "python3 -m http.server 4173"
   },
   "keywords": [],

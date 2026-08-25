@@ -23,7 +23,7 @@ ZIP centers point to the US Census Gazetteer source page. Store records point to
 
 ## Availability honesty
 
-Distance is only proximity. Every store fixture uses `availabilityStatus: not-checked`, `availabilityObservedAt: never`, and a visible “Inventory not checked” label. No product or store is marked in stock from its distance, product-store association, or map presence.
+Distance is only proximity. Every store fixture uses `availabilityStatus: unknown`, `availabilityObservedAt: never`, and a visible “Unknown inventory” label. No product or store is marked in stock from its distance, product-store association, or map presence.
 
 ## Real-map path and tile failure
 

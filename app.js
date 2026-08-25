@@ -9,6 +9,7 @@ const { answerAsk } = window.AskProtein;
 const productScreener = window.ProductScreener;
 const storageKey = 'protein-finds-shell-state-v1';
 const scrollKey = 'protein-finds-scroll-v1';
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 function readJson(storage, key, fallback) {
   try { return JSON.parse(storage.getItem(key) || JSON.stringify(fallback)); }
@@ -28,6 +29,9 @@ const screenerCategories = () => [...new Set(groceryProducts.map(product => prod
 const storedCompareContext = stored.compareContext && ['discover', 'screener'].includes(stored.compareContext.origin)
   ? { origin: stored.compareContext.origin, sort: productScreener.SORTS[stored.compareContext.sort] ? stored.compareContext.sort : 'recommended' }
   : { origin: 'discover', sort: 'recommended' };
+const storedSightings = Object.fromEntries(Object.entries(stored.sightings || {}).filter(([key, report]) =>
+  /^[a-z0-9-]+:[a-z0-9-]+$/.test(key) && report?.status === 'pending-local' && typeof report.reportedAt === 'string'
+));
 const state = {
   saved: new Set((stored.saved || []).filter(id => groceryIds.has(id))),
   basket: (stored.basket || []).filter(id => groceryIds.has(id)),
@@ -40,7 +44,7 @@ const state = {
   locationStatus: 'idle',
   locationMessage: '',
   location: null,
-  mapCenter: { lat: locationData.ZIP_CENTERS['95113'].lat, lon: locationData.ZIP_CENTERS['95113'].lon },
+  mapCenter: { lat: locationData.ZIP_CENTERS['94404'].lat, lon: locationData.ZIP_CENTERS['94404'].lon },
   mapMoved: false,
   locationView: 'map',
   storeFilter: 'all',
@@ -50,7 +54,8 @@ const state = {
   screener: productScreener.normalize(stored.screener, screenerCategories()),
   screenerPage: Number.isInteger(stored.screenerPage) && stored.screenerPage > 0 ? stored.screenerPage : 1,
   screenerBuilderOpen: matchMedia('(min-width: 700px) and (min-height: 501px)').matches,
-  compareContext: storedCompareContext
+  compareContext: storedCompareContext,
+  sightings: storedSightings
 };
 let currentRoute = null;
 let deferredInstallPrompt = null;
@@ -78,7 +83,8 @@ function persist() {
   localStorage.setItem(storageKey, JSON.stringify({
     saved: [...state.saved], basket: state.basket, search: state.search,
     compare: [...state.compare], category: state.category, sort: state.sort,
-    screener: state.screener, screenerPage: state.screenerPage, compareContext: state.compareContext
+    screener: state.screener, screenerPage: state.screenerPage, compareContext: state.compareContext,
+    sightings: state.sightings
   }));
   updateCounts();
 }
@@ -143,17 +149,21 @@ function productCard(product) {
   const nearby = nearestStoreForProduct(product);
   const inBasket = state.basket.includes(product.id);
   const comparing = state.compare.has(product.id);
-  const value = hasKnownPrice(product) ? money(product.pricePer25) : 'Price unknown';
+  const value = product.exactSku ? 'Price unknown' : hasKnownPrice(product) ? money(product.pricePer25) : 'Price unknown';
+  const exactHandoff = product.exactSku?.retailerHandoffs?.find(handoff => handoff.type === 'exact-product');
+  const storeSearch = product.exactSku?.retailerHandoffs?.find(handoff => handoff.type === 'retailer-search');
+  const storeTruth = exactHandoff ? `${exactHandoff.retailer} · exact order handoff` : storeSearch ? `${storeSearch.retailer} · catalog-only search` : `${product.stores[0] || 'Store unknown'} · ${product.availabilityLabel}`;
+  const freshnessTruth = exactHandoff ? `Unknown inventory · price unknown · checked ${exactHandoff.checkedAt}` : storeSearch ? `Unknown inventory · checked ${storeSearch.checkedAt}` : 'Stale seed · checked 2026-08-13 · inventory unknown';
   return `<article class="product-card" data-product-id="${product.id}">
     <div class="product-media">${imageMarkup(product)}</div>
     <div class="product-copy">
       <p class="decision-verdict"><b>${productVerdict(product)}</b></p>
       <h2><a class="product-link" href="#product/${product.id}">${product.name}</a></h2>
       <p class="brand-line">${product.brand} · ${product.category}</p>
-      <div class="card-decision-strip"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div class="decision-price"><b>${value}</b><span>seeded / 25g</span></div></div>
-      <p class="decision-store"><b>${product.stores[0] || 'Store unknown'}</b> · ${product.availabilityLabel}</p>
-      <p class="decision-freshness">Checked Aug 13 · inventory not live</p>
-      ${nearby ? `<p class="nearby-product"><b>${nearby.name}</b> · ${nearby.distanceMiles.toFixed(1)} mi · inventory not checked</p>` : ''}
+      <div class="card-decision-strip"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div class="decision-price"><b>${value}</b><span>${product.exactSku ? 'store price' : 'seeded / 25g'}</span></div></div>
+      <p class="decision-store"><b>${storeTruth}</b></p>
+      <p class="decision-freshness">${freshnessTruth}</p>
+      ${nearby ? `<p class="nearby-product"><b>${nearby.name}</b> · ${nearby.distanceMiles.toFixed(1)} mi · unknown inventory</p>` : ''}
       <div class="card-actions"><a class="secondary" href="#product/${product.id}">Details</a><button class="primary" type="button" data-add="${product.id}" ${inBasket ? 'disabled' : ''}>${inBasket ? 'In basket' : 'Add to basket'}</button></div>
     </div>
     <button class="compare-button" type="button" data-compare="${product.id}" aria-label="${comparing ? 'Remove' : 'Add'} ${product.name} ${comparing ? 'from' : 'to'} comparison" aria-pressed="${comparing}">${comparing ? '✓ Comparing' : '+ Compare'}</button>
@@ -182,7 +192,7 @@ function filteredProducts() {
   const query = state.search.trim().toLowerCase();
   const categories = categoryFilters[state.category];
   let list = groceryProducts.filter(product => {
-    const haystack = [product.name, product.brand, product.category, product.base, product.use, product.blurb].join(' ').toLowerCase();
+    const haystack = [product.name, product.brand, product.category, product.base, product.use, product.blurb, ...(product.stores || []), product.exactSku?.upc, product.exactSku?.variant, ...(product.useCases || [])].filter(Boolean).join(' ').toLowerCase();
     return (!query || haystack.includes(query)) && (!categories || categories.includes(product.category));
   });
   const sorters = {
@@ -209,6 +219,15 @@ function nearestStoreForProduct(product) {
   return nearbyStores().find(store => product.stores.includes(store.name)) || null;
 }
 
+function productsForStore(store) {
+  return groceryProducts.filter(product => product.stores.includes(store.name)).sort((a, b) => {
+    const connectionRank = product => product.exactSku?.retailerHandoffs?.some(handoff => handoff.storeId === store.id && handoff.type === 'exact-product') ? 3
+      : product.exactSku?.retailerHandoffs?.some(handoff => handoff.storeId === store.id && handoff.type === 'retailer-search') ? 2
+      : product.image ? 1 : 0;
+    return connectionRank(b) - connectionRank(a) || b.protein - a.protein || a.name.localeCompare(b.name);
+  });
+}
+
 function setLocation(center) {
   state.location = { lat: center.lat, lon: center.lon, label: center.label };
   state.mapCenter = { lat: center.lat, lon: center.lon };
@@ -222,15 +241,16 @@ function setLocation(center) {
 
 function storeCard(store, index) {
   const selected = state.selectedStore === store.id;
-  const matching = groceryProducts.filter(product => product.stores.includes(store.name));
+  const matching = productsForStore(store);
+  const exactPaths = matching.filter(product => product.exactSku?.retailerHandoffs?.some(handoff => handoff.storeId === store.id));
   return `<article class="store-card" data-store-card="${store.id}" ${selected ? 'data-selected="true"' : ''}>
-    <button class="store-rank" type="button" data-select-store="${store.id}" aria-label="Select ${store.name}">${index + 1}</button>
+    <button class="store-rank" type="button" data-select-store="${store.id}" aria-label="Open ${store.name} details on the map"><span>${index + 1}</span><small>Map</small></button>
     <div class="store-copy"><p class="store-distance">${store.distanceMiles.toFixed(1)} mi away</p><h3>${store.name}</h3><p>${store.address}</p>
-      <div class="store-tags"><span>${matching.length} catalog matches</span><span>Inventory not checked</span></div>
+      <div class="store-tags"><span>${exactPaths.length} exact SKU ${exactPaths.length === 1 ? 'path' : 'paths'}</span><span>${matching.length - exactPaths.length} broad catalog matches</span><span>Unknown inventory</span></div>
       ${matching.length ? `<div class="store-products">${matching.slice(0, 3).map(product => `<a href="#product/${product.id}">${product.name}</a>`).join('')}</div>` : ''}
       <p class="availability-note">${store.availabilityLabel} · checked ${store.availabilityObservedAt}</p>
     </div>
-    <a class="store-source" href="${store.coordinateSourceUrl}" target="_blank" rel="noopener">Source</a>
+    <div class="store-actions"><a class="store-handoff" href="${store.retailerUrl}" target="_blank" rel="noopener">${store.retailerActionLabel}</a><a class="store-source" href="${store.coordinateSourceUrl}" target="_blank" rel="noopener">Map source</a></div>
   </article>`;
 }
 
@@ -239,7 +259,7 @@ function mapMarkup(stores) {
   return `<div class="map-wrap">
     <div class="map-status"><span>OpenStreetMap</span><b>${state.mapMoved ? 'Map moved · results unchanged' : 'Map and list synchronized'}</b></div>
     <div class="store-map" id="storeMap" data-store-map aria-label="Interactive geographic map of ${stores.length} grocery stores"></div>
-    <button class="map-recenter" type="button" data-map-recenter aria-label="Recenter map on ${state.location ? state.location.label : 'Downtown San Jose'}">◎</button>
+    <button class="map-recenter" type="button" data-map-recenter aria-label="Recenter map on ${state.location ? state.location.label : 'Foster City'}">◎</button>
     <button class="primary search-here" type="button" data-search-here ${state.mapMoved ? '' : 'disabled'}>Search this area</button>
     <div class="map-store-sheet" aria-live="polite">${selectedIndex >= 0 ? `<div class="sheet-heading"><span aria-hidden="true"></span><b>Selected grocery store</b></div>${storeCard(stores[selectedIndex], selectedIndex)}` : '<p>Tap a grocery marker to compare distance, catalog matches, and product details.</p>'}</div>
     <p class="map-fallback">© OpenStreetMap contributors · store coordinates are seeded fixtures · proximity never means in stock.</p>
@@ -249,16 +269,26 @@ function mapMarkup(stores) {
 function initializeNearbyMap(stores) {
   const node = document.querySelector('#storeMap');
   if (!node || !window.L) return;
-  const center = state.mapCenter || state.location || locationData.ZIP_CENTERS['95113'];
+  const center = state.mapCenter || state.location || locationData.ZIP_CENTERS['94404'];
   nearbyMap = window.L.map(node, { zoomControl: true }).setView([center.lat, center.lon], 12);
   window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(nearbyMap);
+  const markers = new Map();
+  const visualOffsets = [[0, 0], [-15, -5], [15, -5], [0, 12]];
   stores.forEach((store, index) => {
+    const overlaps = stores.filter(candidate => locationData.distanceMiles(store, candidate) < 0.18);
+    const overlapIndex = overlaps.findIndex(candidate => candidate.id === store.id);
+    const [offsetX, offsetY] = overlaps.length > 1 ? visualOffsets[overlapIndex % visualOffsets.length] : [0, 0];
+    const icon = window.L.divIcon({
+      className: `store-pin${store.id === state.selectedStore ? ' is-selected' : ''}`,
+      html: `<span>${index + 1}</span>`, iconSize: [34, 42], iconAnchor: [17 + offsetX, 42 + offsetY]
+    });
     const marker = window.L.marker([store.lat, store.lon], {
       title: store.name,
-      alt: `${store.name}, ${store.distanceMiles.toFixed(1)} miles away`
+      alt: `${store.name}, ${store.distanceMiles.toFixed(1)} miles away`,
+      icon
     }).addTo(nearbyMap);
     marker.bindTooltip(`${index + 1}. ${store.name}`);
     marker.on('click', event => {
@@ -267,7 +297,17 @@ function initializeNearbyMap(stores) {
       renderNearby();
     });
     marker.getElement()?.setAttribute('data-store-marker', store.id);
+    marker.getElement()?.setAttribute('aria-current', store.id === state.selectedStore ? 'true' : 'false');
+    markers.set(store.id, marker);
   });
+  const selectedStore = stores.find(store => store.id === state.selectedStore);
+  if (selectedStore) {
+    nearbyMap.setView([selectedStore.lat, selectedStore.lon], 15, { animate: false });
+    node.dataset.selectedStore = selectedStore.id;
+    node.dataset.centerLat = String(nearbyMap.getCenter().lat);
+    node.dataset.centerLon = String(nearbyMap.getCenter().lng);
+    markers.get(selectedStore.id)?.openTooltip();
+  }
   if (state.location) {
     window.L.circleMarker([state.location.lat, state.location.lon], {
       radius: 8, color: '#fff', weight: 3, fillColor: '#2877d4', fillOpacity: 1
@@ -294,10 +334,10 @@ function renderNearby() {
     ${screenHead('Grocery map', 'Protein near you', 'Fast switching between one store list and one synchronized map, built for grocery decisions.')}
     <div class="freshness">Coordinates are fixtures · inventory is never inferred from distance</div>
     <section class="location-card" data-location-status="${state.locationStatus}">
-      <form id="locationForm" class="location-form"><label for="zipInput">Search a ZIP</label><div><input id="zipInput" name="zip" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{5}(-[0-9]{4})?" placeholder="95113" aria-describedby="zipHelp"><button class="primary" type="submit">Go</button></div><small id="zipHelp">Demo coverage: 95113, 95129, and 95014.</small></form>
+      <form id="locationForm" class="location-form"><label for="zipInput">Search a ZIP</label><div><input id="zipInput" name="zip" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{5}(-[0-9]{4})?" placeholder="94404" aria-describedby="zipHelp"><button class="primary" type="submit">Go</button></div><small id="zipHelp">Foster City is the first indexed market. Bay Area demo ZIPs also remain available.</small></form>
       <button class="secondary current-location" type="button" data-use-location ${state.locationStatus === 'searching' ? 'disabled' : ''}>Use current location</button>
       ${message}
-      <div class="nearby-toolbar"><div class="location-heading"><b>${ready ? state.location.label : 'Downtown San Jose'}</b><span>${stores.length} stores sorted by distance</span></div><div class="view-toggle" aria-label="Store results view"><button type="button" data-location-view="map" aria-pressed="${state.locationView === 'map'}">⌖ Map</button><button type="button" data-location-view="list" aria-pressed="${state.locationView === 'list'}">☷ List</button></div></div>
+      <div class="nearby-toolbar"><div class="location-heading"><b>${ready ? state.location.label : 'Foster City'}</b><span>${stores.length} stores sorted by distance</span></div><div class="view-toggle" aria-label="Store results view"><button type="button" data-location-view="map" aria-pressed="${state.locationView === 'map'}">⌖ Map</button><button type="button" data-location-view="list" aria-pressed="${state.locationView === 'list'}">☷ List</button></div></div>
       <div class="filter-pills" aria-label="Filter grocery stores">${['all', ...new Set(locationData.STORES.map(store => store.name))].map(filter => `<button type="button" data-store-filter="${filter}" aria-pressed="${state.storeFilter === filter}">${filter === 'all' ? 'All stores' : filter}</button>`).join('')}</div>
       <div class="store-results" data-store-results data-view="${state.locationView}">${state.locationView === 'map' ? mapMarkup(stores) : stores.map(storeCard).join('')}</div>
     </section>
@@ -424,6 +464,48 @@ function renderAsk() {
   app.innerHTML = `<section class="screen" data-screen="ask">${screenHead('Your grocery agent', 'Ask Protein Finds', 'Ask a normal shopping question and get an immediate catalog-grounded answer.')}<div class="freshness">Demo catalog · no live price or inventory · no health advice</div><form class="ask-form" id="askForm"><label for="askInput">What do you need?</label><div><input id="askInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="e.g. cheap breakfast protein"><button class="primary" type="submit" aria-label="Send question">↑</button></div></form><div class="prompt-row" aria-label="Example questions">${['cheap breakfast protein','soy-free snacks','best protein cereal','improve my basket'].map(prompt => `<button type="button" data-ask-prompt="${prompt}">${prompt}</button>`).join('')}</div>${output}</section>`;
 }
 
+function exactSkuMarkup(product) {
+  const sku = product.exactSku;
+  if (!sku) return '';
+  return `<section class="exact-sku" data-exact-sku>
+    <p class="eyebrow">Exact package identity</p>
+    <h2>${escapeHtml(sku.variant)} · ${escapeHtml(sku.size)}</h2>
+    <dl><div><dt>UPC</dt><dd>${escapeHtml(sku.upc)}</dd></div><div><dt>Serving</dt><dd>${escapeHtml(sku.servingSize)}</dd></div><div><dt>Package</dt><dd>${escapeHtml(String(sku.servingsPerPackage))} servings</dd></div></dl>
+  </section>`;
+}
+
+function productEvidenceMarkup(product) {
+  const sku = product.exactSku;
+  if (!sku) return '';
+  return `<section class="product-evidence" data-product-evidence>
+    <p class="eyebrow">Evaluate the fit</p>
+    <h2>${product.protein}g protein · ${product.calories} calories · ${product.efficiency}g / 100 cal</h2>
+    <div class="evidence-tags">${sku.dietaryLabels.map(label => `<span>${escapeHtml(label)}</span>`).join('')}<span>Contains ${escapeHtml(sku.allergens.join(', '))}</span></div>
+    <p><b>Ingredients:</b> ${escapeHtml(product.ingredients)}</p>
+    <p class="evidence-source">Nutrition and ingredients checked ${escapeHtml(sku.nutritionCheckedAt)}. <a href="${escapeHtml(sku.nutritionSourceUrl)}" target="_blank" rel="noopener">Open manufacturer evidence ↗</a></p>
+  </section>`;
+}
+
+function productStoreMarkup(product) {
+  const sku = product.exactSku;
+  const handoffs = sku?.retailerHandoffs || [];
+  if (!handoffs.length) return `<section class="product-store-panel"><p>No exact retailer handoff or official retailer search is attached.</p></section>`;
+  const origin = state.location || locationData.ZIP_CENTERS['94404'];
+  const stores = locationData.storesNear(origin);
+  return handoffs.map(handoff => {
+    const store = stores.find(candidate => candidate.id === handoff.storeId);
+    const isExact = handoff.type === 'exact-product';
+    const key = store ? `${product.id}:${store.id}` : null;
+    const report = key ? state.sightings[key] : null;
+    return `<section class="product-store-panel" ${store ? `data-product-store="${escapeHtml(store.id)}"` : ''} data-retailer-connection="${escapeHtml(handoff.type)}">
+      <div class="product-store-head"><div><p class="eyebrow">${isExact ? 'Exact retailer/order handoff' : 'Official retailer search fallback'}</p><h2>${escapeHtml(store ? `${store.name} · ${store.distanceMiles.toFixed(1)} mi from ${state.location?.label || '94404'}` : handoff.retailer)}</h2>${store ? `<p>${escapeHtml(store.address)}</p>` : ''}</div><span data-availability="unknown">Unknown inventory</span></div>
+      <p class="store-observation"><b>Price unknown · inventory confidence unknown.</b><br>${escapeHtml(isExact ? handoff.detail : 'No exact Target product page or local stock observation is attached. Search uses the exact UPC.')} Checked ${escapeHtml(handoff.checkedAt)}.</p>
+      <div class="product-store-actions">${store ? `<a class="secondary" data-directions href="${escapeHtml(store.directionsUrl)}" target="_blank" rel="noopener">Directions ↗</a>` : ''}<a class="primary" data-retailer-handoff="${escapeHtml(handoff.type)}" href="${escapeHtml(handoff.url)}" target="_blank" rel="noopener">${escapeHtml(handoff.label)} ↗</a></div>
+      ${store ? `<div class="sighting-box"><button class="secondary" type="button" data-report-sighting="${escapeHtml(key)}" aria-pressed="${Boolean(report)}">${report ? '✓ Report saved' : 'I found this here'}</button><p data-sighting-status>${report ? 'Pending report stored only on this device. It is unverified and does not confirm inventory.' : 'Your report will stay only on this device as pending-local. It will not confirm inventory.'}</p></div>` : ''}
+    </section>`;
+  }).join('');
+}
+
 function renderProduct(id) {
   const product = byId(id);
   if (!product) {
@@ -438,10 +520,13 @@ function renderProduct(id) {
       <div class="detail-image">${imageMarkup(product, true)}</div>
       <div class="detail-body">
         <p class="detail-verdict"><b>${productVerdict(product)}</b><span>Why it ranks: ${rankingReason(product)}</span></p><h1 id="screenTitle">${product.name}</h1><p class="brand-line">${product.brand} · ${product.category} · ${product.base}</p>
+        ${exactSkuMarkup(product)}
         <div class="detail-metrics"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div><b>${product.efficiency}</b><span>g / 100 cal</span></div></div>
-        <div class="detail-decision"><span><b>${priceLabel(product)}</b><small>not a live price</small></span><span><b>${product.stores[0] || 'Store unknown'}</b><small>${product.availabilityLabel} · checked Aug 13</small></span></div>
+        ${product.exactSku ? `<div class="detail-decision"><span><b>Price unknown</b><small>No store price observation attached</small></span><span><b>${escapeHtml(product.exactSku.retailerHandoffs?.find(handoff => handoff.type === 'exact-product')?.retailer || product.exactSku.retailerHandoffs?.[0]?.retailer || 'Store unknown')}</b><small>Unknown inventory · checked ${escapeHtml(product.exactSku.retailerHandoffs?.find(handoff => handoff.type === 'exact-product')?.checkedAt || product.exactSku.nutritionCheckedAt)}</small></span></div>` : `<div class="detail-decision"><span><b>${priceLabel(product)}</b><small>not a live price</small></span><span><b>${product.stores[0] || 'Store unknown'}</b><small>${product.availabilityLabel} · checked Aug 13</small></span></div>`}
         <p>${product.blurb}</p><p><b>Best use:</b> ${product.use}</p><p><b>Trade-off:</b> ${product.tradeoff}</p>
-        <div class="truth-note"><b>Seeded demo record.</b> Nutrition, price and availability are not a current exact-SKU claim. Verify the linked current source before buying.</div>
+        ${productEvidenceMarkup(product)}
+        <div class="truth-note"><b>${product.exactSku ? 'Exact identity; bounded evidence.' : 'Seeded demo record.'}</b> ${product.exactSku ? 'The package identity and attached sources are exact. Current store price and inventory remain unknown.' : 'Nutrition, price and availability are not a current exact-SKU claim. Verify the linked current source before buying.'}</div>
+        ${productStoreMarkup(product)}
         <div class="detail-actions"><button class="primary detail-primary-action" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added to basket' : 'Add to basket'}</button><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save product'}</button><button class="secondary" type="button" data-compare="${product.id}" aria-pressed="${state.compare.has(product.id)}">${state.compare.has(product.id) ? '✓ Comparing' : 'Compare'}</button><a class="secondary" href="#basket">View basket</a><a class="source-link" target="_blank" rel="noopener" href="${product.source}">Verify current source ↗</a></div>
         ${imageCredit}
       </div>
@@ -595,7 +680,7 @@ document.addEventListener('submit', event => {
     if (center) setLocation(center);
     else {
       state.locationStatus = 'denied';
-      state.locationMessage = 'That ZIP is outside this demo. Try 95113, 95129, or 95014.';
+      state.locationMessage = 'That ZIP is outside this demo. Try 94404, 95113, 95129, or 95014.';
       renderNearby();
       requestAnimationFrame(() => document.querySelector('#zipInput')?.focus());
     }
@@ -665,6 +750,17 @@ document.addEventListener('click', event => {
     liveRegion.textContent = `Shelf sorted by ${quickSort.textContent.toLowerCase()}`;
     return;
   }
+  const reportSighting = event.target.closest('[data-report-sighting]');
+  if (reportSighting) {
+    const [productId, storeId] = reportSighting.dataset.reportSighting.split(':');
+    const product = byId(productId);
+    const validStore = locationData.STORES.some(store => store.id === storeId);
+    if (!product?.exactSku?.retailerHandoffs?.some(handoff => handoff.storeId === storeId) || !validStore) return;
+    state.sightings[`${productId}:${storeId}`] = { productId, storeId, reportedAt: new Date().toISOString(), status: 'pending-local' };
+    persist(); renderProduct(productId);
+    liveRegion.textContent = 'Pending report saved only on this device. It does not confirm inventory.';
+    return;
+  }
   const add = event.target.closest('[data-add]');
   if (add) {
     const product = byId(add.dataset.add);
@@ -704,7 +800,7 @@ document.addEventListener('click', event => {
   const marker = event.target.closest('[data-store-marker]');
   if (marker) { state.selectedStore = marker.dataset.storeMarker; renderNearby(); return; }
   const recenter = event.target.closest('[data-map-recenter]');
-  if (recenter && nearbyMap) { const center = state.location || locationData.ZIP_CENTERS['95113']; nearbyMap.setView([center.lat, center.lon], 12); return; }
+  if (recenter && nearbyMap) { const center = state.location || locationData.ZIP_CENTERS['94404']; nearbyMap.setView([center.lat, center.lon], 12); return; }
   const searchHere = event.target.closest('[data-search-here]');
   if (searchHere) { setLocation({ ...state.mapCenter, label: 'Searched map area' }); return; }
   const card = event.target.closest('[data-product-id]');
