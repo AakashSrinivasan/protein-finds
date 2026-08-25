@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="description" content="Find, compare, save, and plan a complete vegetarian protein grocery trip.">
+  <meta name="description" content="Screen, compare, and understand vegetarian protein products.">
   <meta name="theme-color" content="#123d2d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,9 +19,9 @@
   <header class="app-header">
     <a class="brand" href="#discover" aria-label="Protein Finds discover">
       <span class="brand-mark" aria-hidden="true">PF</span>
-      <span><b>Protein Finds</b><small>Build a better grocery run</small></span>
+      <span><b>Protein Finds</b><small>The vegetarian protein database</small></span>
     </a>
-    <button id="installButton" class="header-action" type="button" aria-label="Install Protein Finds">Install</button>
+    <div class="header-tools"><a class="header-saved" data-header-saved href="#saved" aria-label="Open saved products"><span aria-hidden="true">♡</span><b>Saved</b><i id="savedCount">0</i></a><button id="installButton" class="header-action" type="button" aria-label="Install Protein Finds">Install</button></div>
   </header>
 
   <main id="appMain" tabindex="-1"></main>
@@ -30,13 +30,15 @@
 
   <nav class="bottom-nav" data-bottom-nav aria-label="App tabs">
     <a href="#discover" data-tab="discover"><span aria-hidden="true">⌕</span><b>Discover</b></a>
+    <a href="#screener" data-tab="screener"><span aria-hidden="true">☷</span><b>Screen</b></a>
     <a href="#nearby" data-tab="nearby"><span aria-hidden="true">⌖</span><b>Nearby</b></a>
     <a href="#ask" data-tab="ask"><span aria-hidden="true">✦</span><b>Ask</b></a>
-    <a href="#saved" data-tab="saved"><span aria-hidden="true">♡</span><b>Saved</b><i id="savedCount">0</i></a>
+
     <a href="#basket" data-tab="basket"><span aria-hidden="true">▣</span><b>Basket</b><i id="basketCount">0</i></a>
   </nav>
 
   <script src="data.js"></script>
+  <script src="product-screener.js"></script>
   <script src="location-data.js"></script>
   <script src="ask-protein.js"></script>
   <script src="vendor/leaflet/leaflet.js"></script>

@@ -6,6 +6,7 @@ const app = document.querySelector('#appMain');
 const liveRegion = document.querySelector('#liveRegion');
 const toastRegion = document.querySelector('#toastRegion');
 const { answerAsk } = window.AskProtein;
+const productScreener = window.ProductScreener;
 const storageKey = 'protein-finds-shell-state-v1';
 const scrollKey = 'protein-finds-scroll-v1';
 
@@ -23,6 +24,10 @@ const categoryFilters = {
   'Snacks': ['Snack']
 };
 const storedCategory = stored.category === 'All' ? 'All groceries' : stored.category;
+const screenerCategories = () => [...new Set(groceryProducts.map(product => product.category).filter(category => typeof category === 'string' && category.trim()))].sort((a, b) => a.localeCompare(b));
+const storedCompareContext = stored.compareContext && ['discover', 'screener'].includes(stored.compareContext.origin)
+  ? { origin: stored.compareContext.origin, sort: productScreener.SORTS[stored.compareContext.sort] ? stored.compareContext.sort : 'recommended' }
+  : { origin: 'discover', sort: 'recommended' };
 const state = {
   saved: new Set((stored.saved || []).filter(id => groceryIds.has(id))),
   basket: (stored.basket || []).filter(id => groceryIds.has(id)),
@@ -41,7 +46,11 @@ const state = {
   storeFilter: 'all',
   selectedStore: null,
   askQuery: '',
-  askAnswer: null
+  askAnswer: null,
+  screener: productScreener.normalize(stored.screener, screenerCategories()),
+  screenerPage: Number.isInteger(stored.screenerPage) && stored.screenerPage > 0 ? stored.screenerPage : 1,
+  screenerBuilderOpen: matchMedia('(min-width: 700px) and (min-height: 501px)').matches,
+  compareContext: storedCompareContext
 };
 let currentRoute = null;
 let deferredInstallPrompt = null;
@@ -52,6 +61,8 @@ const money = value => `$${Number(value).toFixed(2)}`;
 const byId = id => groceryProducts.find(product => product.id === id);
 const hasKnownPrice = product => product.availability !== 'demo-unavailable' && Number.isFinite(product.price);
 const priceLabel = product => hasKnownPrice(product) ? `${money(product.price)} demo pack` : 'Price unknown';
+const numberLabel = (value, suffix = '') => Number.isFinite(value) ? `${value}${suffix}` : 'Unknown';
+const textLabel = value => typeof value === 'string' && value.trim() ? value : 'Unknown';
 const productVerdict = product => product.role === 'anchor' ? 'Strong main protein' : 'Useful supporting pick';
 const rankingReason = product => `${product.protein}g protein / ${product.calories} cal.`;
 const scoreProduct = product => product.efficiency * 5 + product.protein * 1.5 - (hasKnownPrice(product) ? product.pricePer25 : 0) + (product.role === 'anchor' ? 12 : 0);
@@ -66,9 +77,15 @@ const routeKey = route => route.name === 'product' ? `product/${route.id}` : rou
 function persist() {
   localStorage.setItem(storageKey, JSON.stringify({
     saved: [...state.saved], basket: state.basket, search: state.search,
-    compare: [...state.compare], category: state.category, sort: state.sort
+    compare: [...state.compare], category: state.category, sort: state.sort,
+    screener: state.screener, screenerPage: state.screenerPage, compareContext: state.compareContext
   }));
   updateCounts();
+}
+
+function captureDecisionContext() {
+  if (currentRoute?.name === 'screener') state.compareContext = { origin: 'screener', sort: state.screener.sort };
+  else if (currentRoute?.name === 'discover') state.compareContext = { origin: 'discover', sort: state.sort };
 }
 
 function updateCounts() {
@@ -83,7 +100,7 @@ function updateCounts() {
 function parseRoute() {
   const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (hash.startsWith('product/')) return { name: 'product', id: hash.slice(8) };
-  return { name: ['discover', 'nearby', 'ask', 'saved', 'basket', 'compare'].includes(hash) ? hash : 'discover' };
+  return { name: ['discover', 'screener', 'nearby', 'ask', 'saved', 'basket', 'compare'].includes(hash) ? hash : 'discover' };
 }
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
@@ -329,6 +346,59 @@ function renderDiscover() {
   document.querySelector('#sort').value = state.sort;
 }
 
+function screenerResultMarkup(product, rank) {
+  const value = productScreener.hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown';
+  const comparing = state.compare.has(product.id);
+  const inBasket = state.basket.includes(product.id);
+  return `<article class="screen-result" data-screen-result="${product.id}">
+    <div class="screen-rank" aria-label="Result rank ${rank}">${rank}</div>
+    <div class="screen-product"><p>${escapeHtml(textLabel(product.brand))}</p><h3><a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a></h3><small>${escapeHtml(textLabel(product.category))} · ${escapeHtml(textLabel(product.prep))}</small></div>
+    <div class="screen-result-metrics"><div class="screen-metric"><b>${numberLabel(product.protein, 'g')}</b><span>protein</span></div><div class="screen-metric"><b>${numberLabel(product.calories)}</b><span>calories</span></div><div class="screen-metric"><b>${numberLabel(product.efficiency)}</b><span>g / 100 cal</span></div><div class="screen-metric"><b>${value}</b><span>seeded / 25g</span></div></div>
+    <div class="screen-result-actions"><a class="secondary" href="#product/${escapeHtml(product.id)}">Details</a><button class="secondary" type="button" data-compare="${escapeHtml(product.id)}" aria-pressed="${comparing}">${comparing ? 'Comparing' : 'Compare'}</button><button class="primary" type="button" data-add="${escapeHtml(product.id)}" ${inBasket ? 'disabled' : ''}>${inBasket ? 'Added' : 'Add'}</button></div>
+  </article>`;
+}
+
+function renderScreener() {
+  const run = productScreener.run(groceryProducts, state.screener);
+  state.screener = run.screen;
+  const pagination = productScreener.paginate(run.results, state.screenerPage, 24);
+  state.screenerPage = pagination.page;
+  const clauses = productScreener.clauses(run.screen);
+  const categoryOptions = ['All groceries', ...screenerCategories()].map(category => `<option value="${escapeHtml(category)}" ${run.screen.category === category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('');
+  const exclusions = Object.entries(productScreener.EXCLUSIONS).map(([key, definition]) => `<label class="screen-check"><input type="checkbox" data-screen-exclusion="${key}" ${run.screen.exclusions.includes(key) ? 'checked' : ''}><span>${definition.label}</span></label>`).join('');
+  const sortOptions = Object.entries(productScreener.SORTS).map(([key, definition]) => `<option value="${key}" ${run.screen.sort === key ? 'selected' : ''}>${definition.label}</option>`).join('');
+  const activeCriteria = clauses.length
+    ? clauses.map(clause => `<button type="button" data-remove-screen-clause="${clause.key}" aria-label="Remove ${escapeHtml(clause.label)}">${escapeHtml(clause.label)} <span aria-hidden="true">×</span></button>`).join('')
+    : '<span class="screen-no-criteria">No filters yet · showing the complete grocery seed</span>';
+  const results = run.results.length
+    ? `<div class="screen-page-summary" data-screen-page-summary>Showing ${pagination.start}–${pagination.end} of ${pagination.totalResults}</div><div class="screen-result-head" aria-hidden="true"><span>#</span><span>Product</span><span>Protein</span><span>Calories</span><span>Efficiency</span><span>Value</span><span>Actions</span></div><div class="screen-results">${pagination.items.map((product, index) => screenerResultMarkup(product, pagination.start + index)).join('')}</div>${pagination.pageCount > 1 ? `<nav class="screen-pagination" aria-label="Screener result pages"><button type="button" data-screen-page="${pagination.page - 1}" ${pagination.page === 1 ? 'disabled' : ''}>← Previous</button><span>Page ${pagination.page} of ${pagination.pageCount}</span><button type="button" data-screen-page="${pagination.page + 1}" ${pagination.page === pagination.pageCount ? 'disabled' : ''}>Next →</button></nav>` : ''}`
+    : `<div class="empty-card screen-empty"><span class="state-icon">∅</span><h2>No products match all of that</h2><p>Remove one criterion to widen the screen. Protein Finds will not invent a match.</p><button class="primary" type="button" data-screen-reset>Clear screen</button></div>`;
+
+  app.innerHTML = `<section class="screen screener-screen" data-screen="screener">
+    ${screenHead('Universal product screener', 'Find exactly what fits', 'Choose normal food preferences. Results update from the catalog—no formulas, mystery score, or invented products.')}
+    <div class="screener-presets" aria-label="Quick screens"><button type="button" data-screen-template="high-protein">20g+ under 200 cal</button><button type="button" data-screen-template="soy-free">Soy-free standouts</button><button type="button" data-screen-template="ready-now">Ready-now 10g+</button></div>
+    <div class="screener-workspace">
+      <details class="screen-builder" id="screenBuilder" ${state.screenerBuilderOpen ? 'open' : ''}>
+        <summary><div><p class="eyebrow">Build your screen</p><h2>What should make the cut?</h2></div><span>${clauses.length ? `${clauses.length} active` : 'Customize'}</span></summary>
+        <form class="screen-builder-form"><div class="screen-builder-actions"><button type="button" data-screen-reset>Reset all filters</button></div>
+        <label class="screen-field"><span>Product type</span><select id="screenCategory">${categoryOptions}</select></label>
+        <fieldset><legend>Nutrition</legend><div class="screen-number-grid"><label class="screen-field"><span>At least</span><div><input id="screenMinProtein" type="number" min="0" step="1" inputmode="numeric" value="${run.screen.minProtein ?? ''}" placeholder="Any"><b>g protein</b></div></label><label class="screen-field"><span>No more than</span><div><input id="screenMaxCalories" type="number" min="0" step="10" inputmode="numeric" value="${run.screen.maxCalories ?? ''}" placeholder="Any"><b>calories</b></div></label></div></fieldset>
+        <fieldset><legend>Avoid</legend><div class="screen-check-grid">${exclusions}</div></fieldset>
+        <label class="screen-field"><span>Preparation</span><select id="screenPrep"><option value="all" ${run.screen.prep === 'all' ? 'selected' : ''}>Any preparation</option><option value="ready" ${run.screen.prep === 'ready' ? 'selected' : ''}>Ready to eat or drink now</option><option value="heat" ${run.screen.prep === 'heat' ? 'selected' : ''}>Cooking or heating is okay</option></select></label>
+        <p class="screen-builder-note">Thresholds include the number you enter. Supported fields are present for every product in this seed.</p></form>
+      </details>
+      <section class="screen-output" aria-live="polite">
+        <div class="screen-output-head"><div><p class="eyebrow">Live catalog results</p><h2><b data-screen-result-count>${run.results.length}</b> of ${run.total} products</h2></div><label><span>Sort by</span><select id="screenSort">${sortOptions}</select></label></div>
+        <div class="active-screen" aria-label="Active screening criteria">${activeCriteria}</div>
+        ${run.unknownSortCount ? `<p class="screen-unknown-note">${run.unknownSortCount} ${run.unknownSortCount === 1 ? 'result has' : 'results have'} an unknown ${escapeHtml(productScreener.SORTS[run.screen.sort].label.toLowerCase())} value and ${run.unknownSortCount === 1 ? 'is' : 'are'} shown last.</p>` : ''}
+        ${results}
+      </section>
+    </div>
+    <details class="surface-truth screen-truth"><summary>Coverage and data policy</summary><p>This proves the screening workflow against ${run.total} grocery records—not a comprehensive market database. Every result is an existing catalog record. Prices are seeded, inventory is not live, and unsupported fields are not offered as filters.</p></details>
+    ${compareTrayMarkup()}
+  </section>`;
+}
+
 function renderSaved() {
   const saved = groceryProducts.filter(product => state.saved.has(product.id));
   app.innerHTML = `<section class="screen" data-screen="saved">${screenHead('Your shortlist', 'Saved finds', 'Keep exact products close while you build the trip.')}${saved.length ? `<div class="product-list">${saved.map(productCard).join('')}</div>` : `<div class="empty-card"><span class="state-icon">♡</span><h2>No saved products</h2><p>Save a shelf-worthy option from Discover. It will stay on this device.</p><a class="primary" href="#discover">Browse products</a></div>`}</section>`;
@@ -379,44 +449,65 @@ function renderProduct(id) {
   </section>`;
 }
 
-function comparisonDecision(items) {
+function comparisonDecision(items, sort = 'recommended') {
+  const bestKnown = (field, direction, known = product => Number.isFinite(product[field])) => {
+    const values = items.filter(known).map(product => product[field]);
+    return values.length ? (direction === 'min' ? Math.min(...values) : Math.max(...values)) : null;
+  };
   const metricDefinitions = [
-    { key: 'protein', label: 'protein', best: Math.max(...items.map(product => product.protein)), value: product => product.protein },
-    { key: 'calories', label: 'calories', best: Math.min(...items.map(product => product.calories)), value: product => product.calories },
-    { key: 'value', label: 'value', best: Math.min(...items.filter(hasKnownPrice).map(product => product.pricePer25)), value: product => hasKnownPrice(product) ? product.pricePer25 : null },
-    { key: 'efficiency', label: 'efficiency', best: Math.max(...items.map(product => product.efficiency)), value: product => product.efficiency }
+    { key: 'protein', label: 'protein', best: bestKnown('protein', 'max'), value: product => Number.isFinite(product.protein) ? product.protein : null },
+    { key: 'calories', label: 'calories', best: bestKnown('calories', 'min'), value: product => Number.isFinite(product.calories) ? product.calories : null },
+    { key: 'value', label: 'value', best: bestKnown('pricePer25', 'min', hasKnownPrice), value: product => hasKnownPrice(product) ? product.pricePer25 : null },
+    { key: 'efficiency', label: 'efficiency', best: bestKnown('efficiency', 'max'), value: product => Number.isFinite(product.efficiency) ? product.efficiency : null }
   ];
-  const winsFor = product => metricDefinitions.filter(metric => Number.isFinite(metric.best) && metric.value(product) === metric.best);
-  const balanced = [...items].sort((a, b) => winsFor(b).length - winsFor(a).length || b.protein - a.protein)[0];
-  const criterion = {
-    protein: { label: 'Most protein goal', product: [...items].sort((a, b) => b.protein - a.protein)[0], proof: product => `${product.protein}g protein is the highest shown.` },
-    efficiency: { label: 'Leanest picks goal', product: [...items].sort((a, b) => b.efficiency - a.efficiency)[0], proof: product => `${product.efficiency}g protein per 100 calories is the highest shown.` },
-    price: { label: 'Best value goal', product: [...items].filter(hasKnownPrice).sort((a, b) => a.pricePer25 - b.pricePer25)[0], proof: product => `${money(product.pricePer25)} per 25g protein is the lowest known value shown.` }
-  }[state.sort];
-  const activeCriterion = criterion?.product ? criterion : null;
+  const winsFor = product => metricDefinitions.filter(metric => metric.best !== null && metric.value(product) === metric.best);
+  const balanced = [...items].sort((a, b) => winsFor(b).length - winsFor(a).length || productScreener.SORTS.protein.compare(a, b))[0];
+  const sortDefinition = productScreener.SORTS[sort];
+  const sortedWinner = sortDefinition ? [...items].sort(sortDefinition.compare).find(sortDefinition.known) : null;
+  const criterionLabels = {
+    protein: 'Most protein screen', calories: 'Fewest calories screen', efficiency: 'Protein-per-calorie screen',
+    price: 'Lowest seeded cost screen', name: 'Product-name screen'
+  };
+  const proof = {
+    protein: product => `${numberLabel(product.protein, 'g')} protein is the highest known value shown.`,
+    calories: product => `${numberLabel(product.calories)} calories is the lowest known value shown.`,
+    efficiency: product => `${numberLabel(product.efficiency)}g protein per 100 calories is the highest known value shown.`,
+    price: product => `${money(product.pricePer25)} per 25g protein is the lowest known value shown.`,
+    name: product => `${textLabel(product.name)} appears first under the active product-name sort.`
+  };
+  const activeCriterion = sortedWinner && criterionLabels[sort] ? { product: sortedWinner, label: criterionLabels[sort], proof: proof[sort] } : null;
   const product = activeCriterion?.product || balanced;
   const wins = winsFor(product);
   const evidence = wins.map(metric => metric.label);
   const explanation = activeCriterion
     ? `${activeCriterion.proof(product)} It wins ${wins.length} of ${metricDefinitions.length} visible metrics overall.`
-    : `${product.name} wins ${wins.length} of ${metricDefinitions.length} visible metrics: ${evidence.join(', ')}.`;
+    : `${textLabel(product.name)} wins ${wins.length} of ${metricDefinitions.length} visible metrics${evidence.length ? `: ${evidence.join(', ')}` : '.'}`;
   return { product, label: activeCriterion?.label || 'Visible-metric winner', explanation, evidence, metrics: metricDefinitions };
 }
 
 function renderCompare() {
   const items = [...state.compare].map(byId).filter(Boolean);
+  const compareContext = state.compareContext?.origin === 'screener'
+    ? { origin: 'screener', sort: productScreener.SORTS[state.compareContext.sort] ? state.compareContext.sort : 'protein' }
+    : { origin: 'discover', sort: state.compareContext?.sort || 'recommended' };
+  const backHref = `#${compareContext.origin}`;
+  const backLabel = compareContext.origin === 'screener' ? 'Back to Screener' : 'Back to Discover';
   if (items.length < 2) {
-    app.innerHTML = `<section class="screen" data-screen="compare"><a class="detail-back" href="#discover">← Back to Discover</a><div class="empty-card"><span class="state-icon">⇄</span><h1 id="screenTitle">Choose at least two</h1><p>Select up to three products from Discover to compare protein, calories, value, store, and trade-offs without tab hopping.</p><a class="primary" href="#discover">Choose products</a></div></section>`;
+    app.innerHTML = `<section class="screen" data-screen="compare"><a class="detail-back" href="${backHref}">← ${backLabel}</a><div class="empty-card"><span class="state-icon">⇄</span><h1 id="screenTitle">Choose at least two</h1><p>Select up to three products to compare protein, calories, value, store, and trade-offs without tab hopping.</p><a class="primary" href="${backHref}">Choose products</a></div></section>`;
     return;
   }
-  const highestProtein = Math.max(...items.map(product => product.protein));
-  const lowestCalories = Math.min(...items.map(product => product.calories));
+  const knownProtein = items.map(product => product.protein).filter(Number.isFinite);
+  const knownCalories = items.map(product => product.calories).filter(Number.isFinite);
+  const knownEfficiency = items.map(product => product.efficiency).filter(Number.isFinite);
+  const highestProtein = knownProtein.length ? Math.max(...knownProtein) : null;
+  const lowestCalories = knownCalories.length ? Math.min(...knownCalories) : null;
+  const highestEfficiency = knownEfficiency.length ? Math.max(...knownEfficiency) : null;
   const knownValues = items.filter(hasKnownPrice).map(product => product.pricePer25);
   const lowestValue = knownValues.length ? Math.min(...knownValues) : null;
-  const decision = comparisonDecision(items);
+  const decision = comparisonDecision(items, compareContext.sort);
   const recommended = decision.product;
   const matrixRow = (label, value, winner) => `<div class="compare-matrix-row"><b>${label}</b>${items.map(product => `<span ${winner(product) ? 'data-winner="true"' : ''}>${value(product)}${winner(product) ? '<i>Best</i>' : ''}</span>`).join('')}</div>`;
-  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="#discover">← Back to Discover</a>${screenHead('Side-by-side decision', 'Pick the basket winner', 'A phone-sized decision summary first; exact product detail follows without a hidden sideways gesture.')}<aside class="compare-recommendation" data-recommendation-id="${recommended.id}" data-recommendation-goal="${state.sort}"><span>${decision.label}</span><h2>${recommended.name}</h2><p>${decision.explanation}</p><div class="recommendation-evidence" aria-label="Visible metric wins">${decision.evidence.map(metric => `<b>Best ${metric}</b>`).join('')}</div><a class="primary" href="#product/${recommended.id}">Review recommendation</a></aside><div class="compare-matrix" style="--compare-count:${items.length}"><div class="compare-matrix-head"><b>Metric</b>${items.map(product => `<a href="#product/${product.id}">${product.name}</a>`).join('')}</div>${matrixRow('Protein', product => `${product.protein}g`, product => product.protein === highestProtein)}${matrixRow('Calories', product => product.calories, product => product.calories === lowestCalories)}${matrixRow('Value / 25g', product => hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', product => lowestValue !== null && product.pricePer25 === lowestValue)}${matrixRow('Efficiency', product => product.efficiency, product => product.efficiency === Math.max(...items.map(item => item.efficiency)))}</div><div class="compare-pick-list">${items.map(product => `<article class="compare-pick" data-compare-product="${product.id}"><button type="button" data-compare="${product.id}" aria-label="Remove ${product.name} from comparison">×</button><a class="compare-thumb" href="#product/${product.id}" aria-label="Open ${escapeHtml(product.name)} details">${imageMarkup(product)}</a><div class="compare-pick-copy"><p class="eyebrow">${productVerdict(product)}</p><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><dl><div><dt>Best use</dt><dd>${product.use}</dd></div><div><dt>Trade-off</dt><dd>${product.tradeoff}</dd></div></dl><button class="primary" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></div></article>`).join('')}</div><aside class="compare-footnote">Best labels compare only these selected seeded records. Price and inventory are not live.</aside></section>`;
+  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="${backHref}">← ${backLabel}</a>${screenHead('Side-by-side decision', 'Pick the basket winner', compareContext.origin === 'screener' ? 'Recommendation follows your active Screener ranking; exact product detail follows.' : 'A phone-sized decision summary first; exact product detail follows without a hidden sideways gesture.')}<aside class="compare-recommendation" data-recommendation-id="${escapeHtml(recommended.id)}" data-recommendation-goal="${escapeHtml(compareContext.sort)}"><span>${escapeHtml(decision.label)}</span><h2>${escapeHtml(textLabel(recommended.name))}</h2><p>${escapeHtml(decision.explanation)}</p><div class="recommendation-evidence" aria-label="Visible metric wins">${decision.evidence.map(metric => `<b>Best ${escapeHtml(metric)}</b>`).join('')}</div><a class="primary" href="#product/${escapeHtml(recommended.id)}">Review recommendation</a></aside><div class="compare-matrix" style="--compare-count:${items.length}"><div class="compare-matrix-head"><b>Metric</b>${items.map(product => `<a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a>`).join('')}</div>${matrixRow('Protein', product => numberLabel(product.protein, 'g'), product => highestProtein !== null && product.protein === highestProtein)}${matrixRow('Calories', product => numberLabel(product.calories), product => lowestCalories !== null && product.calories === lowestCalories)}${matrixRow('Value / 25g', product => hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', product => lowestValue !== null && product.pricePer25 === lowestValue)}${matrixRow('Efficiency', product => numberLabel(product.efficiency), product => highestEfficiency !== null && product.efficiency === highestEfficiency)}</div><div class="compare-pick-list">${items.map(product => `<article class="compare-pick" data-compare-product="${escapeHtml(product.id)}"><button type="button" data-compare="${escapeHtml(product.id)}" aria-label="Remove ${escapeHtml(textLabel(product.name))} from comparison">×</button><a class="compare-thumb" href="#product/${escapeHtml(product.id)}" aria-label="Open ${escapeHtml(textLabel(product.name))} details">${imageMarkup(product)}</a><div class="compare-pick-copy"><p class="eyebrow">${escapeHtml(productVerdict(product))}</p><h2><a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a></h2><p>${escapeHtml(textLabel(product.brand))} · ${escapeHtml(product.stores?.[0] || 'Store unknown')}</p><dl><div><dt>Best use</dt><dd>${escapeHtml(textLabel(product.use))}</dd></div><div><dt>Trade-off</dt><dd>${escapeHtml(textLabel(product.tradeoff))}</dd></div></dl><button class="primary" type="button" data-add="${escapeHtml(product.id)}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></div></article>`).join('')}</div><aside class="compare-footnote">Best labels compare only these selected seeded records. Price and inventory are not live.</aside></section>`;
 }
 
 function renderBasket() {
@@ -443,9 +534,16 @@ function renderBasket() {
 }
 
 function render() {
-  currentRoute = parseRoute();
+  const previousRoute = currentRoute;
+  const nextRoute = parseRoute();
+  const sameRoute = previousRoute && routeKey(previousRoute) === routeKey(nextRoute);
+  const restoredScroll = sameRoute ? scrollY : (state.scroll[routeKey(nextRoute)] || 0);
+  currentRoute = nextRoute;
+  const renderedRoute = nextRoute;
   document.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-current', tab.dataset.tab === currentRoute.name ? 'page' : 'false'));
+  document.querySelector('[data-header-saved]')?.setAttribute('aria-current', currentRoute.name === 'saved' ? 'page' : 'false');
   if (currentRoute.name === 'discover') renderDiscover();
+  else if (currentRoute.name === 'screener') renderScreener();
   else if (currentRoute.name === 'nearby') renderNearby();
   else if (currentRoute.name === 'ask') renderAsk();
   else if (currentRoute.name === 'saved') renderSaved();
@@ -453,7 +551,9 @@ function render() {
   else if (currentRoute.name === 'compare') renderCompare();
   else renderProduct(currentRoute.id);
   updateCounts();
-  requestAnimationFrame(() => scrollTo(0, state.scroll[routeKey(currentRoute)] || 0));
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (routeKey(currentRoute) === routeKey(renderedRoute)) scrollTo(0, restoredScroll);
+  }));
 }
 
 document.addEventListener('input', event => {
@@ -469,7 +569,24 @@ document.addEventListener('input', event => {
 
 document.addEventListener('change', event => {
   if (event.target.id === 'sort') { state.sort = event.target.value; persist(); renderDiscover(); }
+  if (event.target.id === 'screenCategory') { state.screener = { ...state.screener, category: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
+  if (event.target.id === 'screenMinProtein') { state.screener = { ...state.screener, minProtein: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
+  if (event.target.id === 'screenMaxCalories') { state.screener = { ...state.screener, maxCalories: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
+  if (event.target.id === 'screenPrep') { state.screener = { ...state.screener, prep: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
+  if (event.target.id === 'screenSort') { state.screener = { ...state.screener, sort: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
+  if (event.target.matches('[data-screen-exclusion]')) {
+    const key = event.target.dataset.screenExclusion;
+    const exclusions = new Set(state.screener.exclusions);
+    event.target.checked ? exclusions.add(key) : exclusions.delete(key);
+    state.screener = { ...state.screener, exclusions: [...exclusions] };
+    state.screenerPage = 1;
+    persist(); renderScreener();
+  }
 });
+
+document.addEventListener('toggle', event => {
+  if (event.target.id === 'screenBuilder') state.screenerBuilderOpen = event.target.open;
+}, true);
 
 document.addEventListener('submit', event => {
   if (event.target.id === 'locationForm') {
@@ -508,6 +625,7 @@ document.addEventListener('click', event => {
   const compare = event.target.closest('[data-compare]');
   if (compare) {
     event.stopPropagation();
+    captureDecisionContext();
     const id = compare.dataset.compare;
     const product = byId(id);
     if (state.compare.has(id)) state.compare.delete(id);
@@ -519,6 +637,27 @@ document.addEventListener('click', event => {
   }
   const clearCompare = event.target.closest('[data-clear-compare]');
   if (clearCompare) { state.compare.clear(); persist(); render(); showToast('Comparison cleared'); return; }
+  const screenTemplate = event.target.closest('[data-screen-template]');
+  if (screenTemplate) { state.screener = productScreener.applyTemplate(screenTemplate.dataset.screenTemplate, screenerCategories()); state.screenerPage = 1; persist(); renderScreener(); liveRegion.textContent = `${screenTemplate.textContent} screen applied`; return; }
+  const screenReset = event.target.closest('[data-screen-reset]');
+  if (screenReset) { state.screener = productScreener.normalize({}, screenerCategories()); state.screenerPage = 1; persist(); renderScreener(); liveRegion.textContent = 'Screen cleared'; return; }
+  const screenPage = event.target.closest('[data-screen-page]');
+  if (screenPage) {
+    state.screenerPage = Number(screenPage.dataset.screenPage);
+    persist(); renderScreener();
+    requestAnimationFrame(() => document.querySelector('.screen-output')?.scrollIntoView({ block: 'start' }));
+    return;
+  }
+  const removeScreenClause = event.target.closest('[data-remove-screen-clause]');
+  if (removeScreenClause) {
+    const key = removeScreenClause.dataset.removeScreenClause;
+    if (key.startsWith('exclude:')) state.screener = { ...state.screener, exclusions: state.screener.exclusions.filter(item => item !== key.slice(8)) };
+    else if (key === 'category') state.screener = { ...state.screener, category: 'All groceries' };
+    else if (key === 'prep') state.screener = { ...state.screener, prep: 'all' };
+    else state.screener = { ...state.screener, [key]: null };
+    state.screenerPage = 1;
+    persist(); renderScreener(); return;
+  }
   const quickSort = event.target.closest('[data-quick-sort]');
   if (quickSort) {
     state.sort = quickSort.dataset.quickSort;
@@ -569,9 +708,9 @@ document.addEventListener('click', event => {
   const searchHere = event.target.closest('[data-search-here]');
   if (searchHere) { setLocation({ ...state.mapCenter, label: 'Searched map area' }); return; }
   const card = event.target.closest('[data-product-id]');
-  if (card) { navigate(`#product/${card.dataset.productId}`); return; }
+  if (card) { captureDecisionContext(); persist(); navigate(`#product/${card.dataset.productId}`); return; }
   const localLink = event.target.closest('a[href^="#"]');
-  if (localLink) { event.preventDefault(); navigate(localLink.getAttribute('href')); }
+  if (localLink) { event.preventDefault(); captureDecisionContext(); persist(); navigate(localLink.getAttribute('href')); }
 });
 
 window.addEventListener('hashchange', render);
