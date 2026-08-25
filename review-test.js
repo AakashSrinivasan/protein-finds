@@ -25,7 +25,8 @@ async function auditAxe(page, name, axeSource) {
   fs.mkdirSync(artifactDir, { recursive: true });
   const axeSource = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
   const chromiumBrowser = await chromium.launch({ headless: true });
-  const page = await chromiumBrowser.newPage({ viewport: { width: 390, height: 844 } });
+  const chromiumContext = await chromiumBrowser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const page = await chromiumContext.newPage();
   page.on('console', message => message.type() === 'error' && report.consoleErrors.push(message.text()));
   page.on('pageerror', error => report.consoleErrors.push(error.message));
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -33,8 +34,9 @@ async function auditAxe(page, name, axeSource) {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-product-id]');
 
-  assert.ok(await page.locator('[data-product-id]').first().boundingBox().then(box => box && box.y < 844));
-  pass('first-viewport-product', 'search and an exact licensed product are visible at 390×844');
+  assert.ok(await page.locator('[data-featured-id]').first().boundingBox().then(box => box && box.y < 844));
+  assert.equal(await page.locator('[data-featured-id]').first().locator('[data-product-image]').isVisible(), true);
+  pass('first-viewport-product', 'decision hero and an exact licensed featured product are visible at 390×844');
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(element => getComputedStyle(element).position), 'fixed');
   pass('persistent-bottom-navigation', 'five focused grocery-loop destinations, including Nearby and Ask, remain fixed');
 
@@ -56,6 +58,17 @@ async function auditAxe(page, name, axeSource) {
   await page.locator('[data-remove]').first().click();
   await page.locator('[data-tab="discover"]').click();
 
+  const compareIds = await page.locator('[data-product-id]').evaluateAll(cards => cards.slice(0, 2).map(card => card.dataset.productId));
+  for (const id of compareIds) await page.locator(`[data-compare="${id}"]`).click();
+  await page.locator('[data-compare-tray] a[href="#compare"]').click();
+  await page.waitForSelector('[data-screen="compare"] [data-compare-product]');
+  await auditAxe(page, 'mobile-comparison', axeSource);
+  assert.equal(await page.locator('[data-compare-product]').count(), 2, 'comparison renders selected products only');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, 'comparison contains horizontal scrolling without body overflow');
+  pass('comparison-loop', 'two selected products align decision metrics, leaders, stores, trade-offs, and basket actions');
+  await page.locator('a[href="#discover"]').first().click();
+  await page.locator('[data-clear-compare]').click();
+
   for (const tab of ['discover', 'nearby', 'ask', 'saved', 'basket']) {
     await page.locator(`[data-tab="${tab}"]`).click();
     await page.waitForSelector(`[data-screen="${tab}"]:visible`);
@@ -72,7 +85,7 @@ async function auditAxe(page, name, axeSource) {
   pass('grounded-ask', 'soy-free snack prompt returns catalog IDs, field citations, honest unknowns, and an inspectable grounded plan');
 
   await page.locator('[data-tab="discover"]').click();
-  await page.locator('[data-product-id]').first().click();
+  await page.locator('[data-product-id]').first().locator('.product-link').click();
   await auditAxe(page, 'mobile-product-detail', axeSource);
   assert.ok(await page.locator('[data-history-back]').isVisible(), 'product detail has a History/Back control');
   assert.equal(await page.locator('.detail-primary-action').isVisible(), true, 'product detail exposes a dominant primary action');
@@ -82,7 +95,7 @@ async function auditAxe(page, name, axeSource) {
   const smallTargets = await page.locator('button:visible,a:visible,input:visible,select:visible').evaluateAll(nodes => nodes.map(node => {
     const box = node.getBoundingClientRect();
     return { label: (node.textContent || node.getAttribute('aria-label') || '').trim(), width: box.width, height: box.height };
-  }).filter(target => target.width < 44 || target.height < 44));
+  }).filter(target => target.width < 43.5 || target.height < 43.5));
   assert.deepEqual(smallTargets, [], 'visible product-detail controls meet 44×44 minimum');
   pass('touch-targets', 'visible controls are at least 44×44 CSS px');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false);

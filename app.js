@@ -26,6 +26,7 @@ const storedCategory = stored.category === 'All' ? 'All groceries' : stored.cate
 const state = {
   saved: new Set((stored.saved || []).filter(id => groceryIds.has(id))),
   basket: (stored.basket || []).filter(id => groceryIds.has(id)),
+  compare: new Set((stored.compare || []).filter(id => groceryIds.has(id)).slice(0, 3)),
   search: stored.search || '',
   category: Object.hasOwn(categoryFilters, storedCategory) ? storedCategory : 'All groceries',
   sort: stored.sort || 'recommended',
@@ -59,7 +60,7 @@ const routeKey = route => route.name === 'product' ? `product/${route.id}` : rou
 function persist() {
   localStorage.setItem(storageKey, JSON.stringify({
     saved: [...state.saved], basket: state.basket, search: state.search,
-    category: state.category, sort: state.sort
+    compare: [...state.compare], category: state.category, sort: state.sort
   }));
   updateCounts();
 }
@@ -76,7 +77,7 @@ function updateCounts() {
 function parseRoute() {
   const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (hash.startsWith('product/')) return { name: 'product', id: hash.slice(8) };
-  return { name: ['discover', 'nearby', 'ask', 'saved', 'basket'].includes(hash) ? hash : 'discover' };
+  return { name: ['discover', 'nearby', 'ask', 'saved', 'basket', 'compare'].includes(hash) ? hash : 'discover' };
 }
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
@@ -117,6 +118,7 @@ function productCard(product) {
   const saved = state.saved.has(product.id);
   const nearby = nearestStoreForProduct(product);
   const inBasket = state.basket.includes(product.id);
+  const comparing = state.compare.has(product.id);
   const value = hasKnownPrice(product) ? money(product.pricePer25) : 'Price unknown';
   return `<article class="product-card" data-product-id="${product.id}">
     <div class="product-media">${imageMarkup(product)}</div>
@@ -130,6 +132,7 @@ function productCard(product) {
       ${nearby ? `<p class="nearby-product"><b>${nearby.name}</b> · ${nearby.distanceMiles.toFixed(1)} mi · inventory not checked</p>` : ''}
       <div class="card-actions"><a class="secondary" href="#product/${product.id}">Details</a><button class="primary" type="button" data-add="${product.id}" ${inBasket ? 'disabled' : ''}>${inBasket ? 'In basket' : 'Add to basket'}</button></div>
     </div>
+    <button class="compare-button" type="button" data-compare="${product.id}" aria-label="${comparing ? 'Remove' : 'Add'} ${product.name} ${comparing ? 'from' : 'to'} comparison" aria-pressed="${comparing}">${comparing ? '✓ Comparing' : '+ Compare'}</button>
     <button class="save-button" type="button" data-save="${product.id}" aria-label="${saved ? 'Remove' : 'Save'} ${product.name}" aria-pressed="${saved}">${saved ? '♥' : '♡'}</button>
   </article>`;
 }
@@ -278,23 +281,41 @@ function renderNearby() {
   if (state.locationView === 'map') requestAnimationFrame(() => initializeNearbyMap(stores));
 }
 
+function featuredCard(product, index) {
+  const label = ['Protein leader', 'Smart snack', 'Classic main'][index] || 'Top catalog pick';
+  return `<article class="featured-card" data-featured-id="${product.id}">
+    <a class="featured-media" href="#product/${product.id}" aria-label="View ${product.name}">${imageMarkup(product)}</a>
+    <div class="featured-copy"><span>${label}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><div><b>${product.protein}g</b><small>protein</small><b>${product.calories}</b><small>cal</small></div></div>
+  </article>`;
+}
+
+function compareTrayMarkup() {
+  const selected = [...state.compare].map(byId).filter(Boolean);
+  if (!selected.length) return '';
+  return `<aside class="compare-tray" data-compare-tray aria-live="polite"><div><span>${selected.map(product => `<i title="${product.name}">${product.name.slice(0, 1)}</i>`).join('')}</span><p><b>${selected.length}/3 selected</b><small>${selected.length < 2 ? 'Choose one more to compare' : 'Ready for a side-by-side decision'}</small></p></div><button type="button" data-clear-compare>Clear</button><a class="primary" href="#compare" ${selected.length < 2 ? 'aria-disabled="true"' : ''}>Compare</a></aside>`;
+}
+
 function renderDiscover() {
   const list = filteredProducts();
+  const featured = ['beyond-steak', 'quest-cookie', 'boca-original'].map(byId).filter(Boolean);
   const categories = Object.keys(categoryFilters);
   const forcedState = state.dataState;
   let content;
   if (['loading', 'error'].includes(forcedState)) content = stateMarkup(forcedState);
   else if (forcedState === 'empty' || !list.length) content = stateMarkup('empty');
   else content = `${['offline', 'stale'].includes(forcedState) ? stateMarkup(forcedState) : ''}<p class="results-meta">${list.length} seeded products · exact package images only where rights and variant identity are recorded</p><div class="product-list">${list.map(productCard).join('')}</div>`;
-  app.innerHTML = `<section class="screen" data-screen="discover">
-    ${screenHead('Complete the grocery trip', 'Find protein worth a basket spot', 'Search the shelf, understand the trade-off, then save or plan.')}
-    <div class="freshness">Demo records · seeded 2026-08-13 · not live price or inventory</div>
+  app.innerHTML = `<section class="screen discover-screen" data-screen="discover">
+    <section class="discover-hero"><div class="hero-orbit" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">Vegetarian protein, decoded</p><h1 id="screenTitle">Build a better<br><em>grocery run.</em></h1><p>Compare the shelf by protein, calories, value, and store—then turn the winners into one practical trip.</p><div class="hero-actions"><button type="button" data-quick-sort="protein">Most protein</button><button type="button" data-quick-sort="efficiency">Leanest picks</button><button type="button" data-quick-sort="price">Best value</button></div><div class="hero-proof"><span><b>12</b> grocery finds</span><span><b>3</b> exact images</span><span><b>0</b> invented claims</span></div></section>
+    <section class="featured-section"><div class="section-title"><div><p class="eyebrow">Start with the standouts</p><h2>Top shelf decisions</h2></div><span>Swipe →</span></div><div class="featured-rail">${featured.map(featuredCard).join('')}</div></section>
+    <div class="freshness compact-freshness">Demo records · seeded 2026-08-13 · not live price or inventory</div>
     <div class="discovery-tools">
       <label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" value="${state.search.replaceAll('"', '&quot;')}" aria-label="Search products" placeholder="Search products"></label>
       <select id="sort" aria-label="Sort products"><option value="recommended">Best fit</option><option value="protein">Protein</option><option value="efficiency">Efficiency</option><option value="price">Seed price</option></select>
     </div>
     <div class="category-row" aria-label="Product categories">${categories.map(category => `<button type="button" data-category="${category}" aria-pressed="${state.category === category}">${category}</button>`).join('')}</div>
+    <div class="section-title catalog-title"><div><p class="eyebrow">The full shelf</p><h2>Compare every find</h2></div></div>
     <div id="catalogState">${content}</div>
+    ${compareTrayMarkup()}
   </section>`;
   document.querySelector('#sort').value = state.sort;
 }
@@ -342,11 +363,25 @@ function renderProduct(id) {
         <div class="detail-decision"><span><b>${priceLabel(product)}</b><small>not a live price</small></span><span><b>${product.stores[0] || 'Store unknown'}</b><small>${product.availabilityLabel} · checked Aug 13</small></span></div>
         <p>${product.blurb}</p><p><b>Best use:</b> ${product.use}</p><p><b>Trade-off:</b> ${product.tradeoff}</p>
         <div class="truth-note"><b>Seeded demo record.</b> Nutrition, price and availability are not a current exact-SKU claim. Verify the linked current source before buying.</div>
-        <div class="detail-actions"><button class="primary detail-primary-action" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added to basket' : 'Add to basket'}</button><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save product'}</button><a class="secondary" href="#basket">View basket</a><a class="source-link" target="_blank" rel="noopener" href="${product.source}">Verify current source ↗</a></div>
+        <div class="detail-actions"><button class="primary detail-primary-action" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added to basket' : 'Add to basket'}</button><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save product'}</button><button class="secondary" type="button" data-compare="${product.id}" aria-pressed="${state.compare.has(product.id)}">${state.compare.has(product.id) ? '✓ Comparing' : 'Compare'}</button><a class="secondary" href="#basket">View basket</a><a class="source-link" target="_blank" rel="noopener" href="${product.source}">Verify current source ↗</a></div>
         ${imageCredit}
       </div>
     </article>
   </section>`;
+}
+
+function renderCompare() {
+  const items = [...state.compare].map(byId).filter(Boolean);
+  if (items.length < 2) {
+    app.innerHTML = `<section class="screen" data-screen="compare"><a class="detail-back" href="#discover">← Back to Discover</a><div class="empty-card"><span class="state-icon">⇄</span><h1 id="screenTitle">Choose at least two</h1><p>Select up to three products from Discover to compare protein, calories, value, store, and trade-offs without tab hopping.</p><a class="primary" href="#discover">Choose products</a></div></section>`;
+    return;
+  }
+  const highestProtein = Math.max(...items.map(product => product.protein));
+  const lowestCalories = Math.min(...items.map(product => product.calories));
+  const knownValues = items.filter(hasKnownPrice).map(product => product.pricePer25);
+  const lowestValue = knownValues.length ? Math.min(...knownValues) : null;
+  const cell = (value, label, winner = false) => `<div class="compare-cell" ${winner ? 'data-winner="true"' : ''}><b>${value}</b><span>${label}</span>${winner ? '<i>Best</i>' : ''}</div>`;
+  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="#discover">← Back to Discover</a>${screenHead('Side-by-side decision', 'Pick the basket winner', 'The same seeded catalog fields, aligned so the trade-offs are obvious.')}<div class="compare-scroll"><div class="compare-grid" style="--compare-count:${items.length}">${items.map(product => `<article class="compare-column" data-compare-product="${product.id}"><button type="button" data-compare="${product.id}" aria-label="Remove ${product.name} from comparison">×</button><a class="compare-image" href="#product/${product.id}">${imageMarkup(product)}</a><p class="eyebrow">${productVerdict(product)}</p><h2><a href="#product/${product.id}">${product.name}</a></h2><p class="compare-brand">${product.brand}</p>${cell(`${product.protein}g`, 'protein', product.protein === highestProtein)}${cell(product.calories, 'calories', product.calories === lowestCalories)}${cell(hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', 'seeded / 25g', lowestValue !== null && product.pricePer25 === lowestValue)}${cell(product.efficiency, 'g / 100 cal')}<div class="compare-story"><b>Best use</b><p>${product.use}</p><b>Trade-off</b><p>${product.tradeoff}</p></div><p class="compare-store">${product.stores[0] || 'Store unknown'}<small>${product.availabilityLabel}</small></p><button class="primary" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></article>`).join('')}</div></div><aside class="compare-footnote">Best labels compare only these selected seeded records. Price and inventory are not live.</aside></section>`;
 }
 
 function renderBasket() {
@@ -380,6 +415,7 @@ function render() {
   else if (currentRoute.name === 'ask') renderAsk();
   else if (currentRoute.name === 'saved') renderSaved();
   else if (currentRoute.name === 'basket') renderBasket();
+  else if (currentRoute.name === 'compare') renderCompare();
   else renderProduct(currentRoute.id);
   updateCounts();
   requestAnimationFrame(() => scrollTo(0, state.scroll[routeKey(currentRoute)] || 0));
@@ -433,6 +469,28 @@ document.addEventListener('click', event => {
     const wasSaved = state.saved.has(save.dataset.save);
     wasSaved ? state.saved.delete(save.dataset.save) : state.saved.add(save.dataset.save);
     persist(); render(); showToast(`${product?.name || 'Product'} ${wasSaved ? 'removed from saved' : 'saved'}`); return;
+  }
+  const compare = event.target.closest('[data-compare]');
+  if (compare) {
+    event.stopPropagation();
+    const id = compare.dataset.compare;
+    const product = byId(id);
+    if (state.compare.has(id)) state.compare.delete(id);
+    else if (state.compare.size < 3) state.compare.add(id);
+    else { showToast('Compare up to three products. Remove one to add another.'); return; }
+    persist(); render();
+    showToast(`${product?.name || 'Product'} ${state.compare.has(id) ? 'added to' : 'removed from'} comparison`);
+    return;
+  }
+  const clearCompare = event.target.closest('[data-clear-compare]');
+  if (clearCompare) { state.compare.clear(); persist(); render(); showToast('Comparison cleared'); return; }
+  const quickSort = event.target.closest('[data-quick-sort]');
+  if (quickSort) {
+    state.sort = quickSort.dataset.quickSort;
+    persist(); renderDiscover();
+    requestAnimationFrame(() => document.querySelector('.catalog-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    showToast(`Shelf sorted by ${quickSort.textContent.toLowerCase()}`);
+    return;
   }
   const add = event.target.closest('[data-add]');
   if (add) {

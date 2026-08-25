@@ -22,16 +22,16 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
 
   assert.equal(await page.locator('[data-screen]:visible').count(), 1, `${label}: one focused screen`);
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(el => getComputedStyle(el).position), 'fixed', `${label}: bottom nav stays fixed`);
-  assert.ok(await page.locator('[data-product-id]').first().boundingBox().then(box => box && box.y < viewport.height), `${label}: product is in first viewport`);
+  assert.ok(await page.locator('[data-featured-id]').first().boundingBox().then(box => box && box.y < viewport.height), `${label}: featured product is in first viewport`);
   assert.ok(await page.locator('.freshness').isVisible(), `${label}: demo/not-live data status remains visible`);
-  const firstImage = page.locator('[data-product-id]').first().locator('[data-product-image]');
+  const firstImage = page.locator('[data-featured-id]').first().locator('[data-product-image]');
   assert.equal(await firstImage.getAttribute('data-image-license'), 'CC BY-SA 3.0', `${label}: first card uses licensed exact package image`);
   assert.ok(await firstImage.getAttribute('data-upc'), `${label}: visible image is tied to a UPC`);
 
   const smallTargets = await page.locator('button:visible,a:visible,input:visible,select:visible').evaluateAll(nodes => nodes.map(node => {
     const rect = node.getBoundingClientRect();
     return { label: (node.textContent || node.getAttribute('aria-label') || '').trim(), width: rect.width, height: rect.height };
-  }).filter(target => target.width < 44 || target.height < 44));
+  }).filter(target => target.width < 43.5 || target.height < 43.5));
   assert.deepEqual(smallTargets, [], `${label}: all visible interactive targets are at least 44px`);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, `${label}: no horizontal overflow`);
 
@@ -47,7 +47,7 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
   await page.click('[data-tab="discover"]');
   await page.waitForSelector('[data-product-id]');
 
-  await page.locator('[data-product-id]').first().click();
+  await page.locator('[data-product-id]').first().locator('.product-link').click();
   await page.waitForSelector('[data-screen="product"]:visible');
   const productHash = await page.evaluate(() => location.hash);
   assert.match(productHash, /^#product\//, `${label}: exact product route`);

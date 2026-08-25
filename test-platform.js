@@ -12,7 +12,8 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.ok(manifest.icons.some(icon => icon.sizes === '512x512' && icon.purpose.includes('maskable')), 'manifest has a maskable launch icon');
 
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
   const errors = [];
   page.on('console', message => message.type() === 'error' && errors.push(message.text()));
   page.on('pageerror', error => errors.push(error.message));
@@ -22,6 +23,11 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   await page.waitForSelector('[data-product-id]');
 
   assert.equal(await page.locator('[data-product-id]').count(), 12, 'grocery discovery excludes restaurant records');
+  assert.equal(await page.locator('.discover-hero').isVisible(), true, 'discovery opens with a distinct decision-led hero');
+  assert.equal(await page.locator('[data-featured-id]').count(), 3, 'three package-forward featured decisions lead the shelf');
+  await page.locator('[data-quick-sort="protein"]').click();
+  assert.equal(await page.locator('#sort').inputValue(), 'protein', 'hero goal controls immediately re-sort the shelf');
+  await page.selectOption('#sort', 'recommended');
   assert.equal(await page.locator('[data-screen]:visible').count(), 1, 'only one focused screen renders');
   assert.deepEqual(await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => tab.dataset.tab)), ['discover', 'nearby', 'ask', 'saved', 'basket'], 'primary navigation includes Nearby and grounded Ask inside the grocery loop');
   assert.equal(await page.locator('[data-category="Restaurant"]').count(), 0, 'restaurants are not a top-level grocery category');
@@ -32,7 +38,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.match(await page.locator('[data-product-id="magic-spoon"] .decision-price').textContent(), /Price unknown/i, 'unsupported package price is not presented as current');
   assert.equal(await page.locator('.role-pill').count(), 0, 'internal ranking labels are not exposed to shoppers');
   assert.equal(await page.locator('link[rel="manifest"]').count(), 1, 'install manifest is linked');
-  assert.equal(await page.locator('[data-product-image]').count(), 3, 'only three exact licensed images are attached');
+  assert.equal(await page.locator('[data-product-id] [data-product-image]').count(), 3, 'only three exact licensed images are attached to catalog cards');
   assert.equal(await page.locator('[data-image-needed]').count(), 9, 'uncertain grocery variants use image-needed states');
 
   const imageRecords = await page.locator('[data-product-image]').evaluateAll(images => images.map(image => ({
@@ -43,6 +49,16 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
     assert.equal(image.license, 'CC BY-SA 3.0', 'exact image carries its license');
     assert.ok(fs.existsSync(path.join(root, image.src)), `local image exists: ${image.src}`);
   }
+
+  const compareIds = await page.locator('[data-product-id]').evaluateAll(cards => cards.slice(0, 2).map(card => card.dataset.productId));
+  for (const id of compareIds) await page.locator(`[data-compare="${id}"]`).click();
+  assert.match(await page.locator('[data-compare-tray]').textContent(), /2\/3 selected[\s\S]*Ready for a side-by-side decision/, 'comparison tray confirms a decision-ready selection');
+  await page.locator('[data-compare-tray] a[href="#compare"]').click();
+  await page.waitForSelector('[data-screen="compare"] [data-compare-product]');
+  assert.equal(await page.locator('[data-compare-product]').count(), 2, 'comparison aligns two exact products');
+  assert.ok(await page.locator('[data-winner="true"]').count() >= 2, 'comparison marks metric leaders');
+  await page.locator('a[href="#discover"]').first().click();
+  await page.locator('[data-clear-compare]').click();
 
   await page.locator('[data-tab="ask"]').click();
   await page.fill('#askInput', 'best protein cereal');
