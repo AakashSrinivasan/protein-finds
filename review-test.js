@@ -130,6 +130,20 @@ async function auditAxe(page, name, axeSource) {
 
   assert.deepEqual(report.consoleErrors, [], 'zero Chromium console/page errors');
   pass('browser-console', 'zero console/page errors');
+
+  const desktopContext = await chromiumBrowser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
+  const desktopPage = await desktopContext.newPage();
+  const desktopErrors = [];
+  desktopPage.on('console', message => message.type() === 'error' && desktopErrors.push(message.text()));
+  desktopPage.on('pageerror', error => desktopErrors.push(error.message));
+  await desktopPage.goto(`${url.split('#')[0]}#product/beyond-steak`, { waitUntil: 'domcontentloaded' });
+  await desktopPage.waitForSelector('[data-product-store="target-bridgepointe-san-mateo"]');
+  await auditAxe(desktopPage, 'desktop-exact-product', axeSource);
+  assert.equal(await desktopPage.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false);
+  assert.deepEqual(desktopErrors, [], 'desktop Chromium console/page errors');
+  await desktopPage.screenshot({ path: path.join(artifactDir, 'desktop-beyond-steak-1440x900.png'), fullPage: false });
+  pass('desktop-exact-product', '1440×900 exact product journey has no overflow, Axe violations, or console/page errors');
+  await desktopContext.close();
   await chromiumBrowser.close();
 
   const webkitBrowser = await webkit.launch({ headless: true });
@@ -138,11 +152,12 @@ async function auditAxe(page, name, axeSource) {
     const errors = [];
     webkitPage.on('console', message => message.type() === 'error' && errors.push(message.text()));
     webkitPage.on('pageerror', error => errors.push(error.message));
-    await webkitPage.goto(url, { waitUntil: 'domcontentloaded' });
-    await webkitPage.waitForSelector('[data-product-id]');
+    await webkitPage.goto(`${url.split('#')[0]}#product/beyond-steak`, { waitUntil: 'domcontentloaded' });
+    await webkitPage.waitForSelector('[data-product-store="target-bridgepointe-san-mateo"]');
     assert.equal(await webkitPage.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false);
     assert.deepEqual(errors, [], `${name} WebKit errors`);
-    pass(`webkit-${name}`, `${viewport.width}×${viewport.height}: product visible, no overflow, no console/page errors`);
+    await webkitPage.screenshot({ path: path.join(artifactDir, `webkit-exact-product-${name}.png`), fullPage: false });
+    pass(`webkit-${name}`, `${viewport.width}×${viewport.height}: exact product/store handoff visible, no overflow, no console/page errors`);
     await webkitPage.close();
   }
   await webkitBrowser.close();
