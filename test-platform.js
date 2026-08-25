@@ -12,7 +12,8 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.ok(manifest.icons.some(icon => icon.sizes === '512x512' && icon.purpose.includes('maskable')), 'manifest has a maskable launch icon');
 
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
   const errors = [];
   page.on('console', message => message.type() === 'error' && errors.push(message.text()));
   page.on('pageerror', error => errors.push(error.message));
@@ -22,6 +23,20 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   await page.waitForSelector('[data-product-id]');
 
   assert.equal(await page.locator('[data-product-id]').count(), 12, 'grocery discovery excludes restaurant records');
+  assert.equal(await page.locator('.discover-hero').isVisible(), true, 'discovery opens with a distinct decision-led hero');
+  assert.equal(await page.locator('[data-featured-id]').count(), 3, 'three package-forward featured decisions lead the shelf');
+  assert.equal(await page.locator('[data-featured-id] .featured-actions').count(), 3, 'every featured recommendation exposes direct decision actions');
+  assert.equal(await page.locator('[data-featured-id] [data-add]').count(), 3, 'every featured recommendation can be added without scrolling to the catalog');
+  assert.equal(await page.locator('[data-featured-id] [data-compare]').count(), 3, 'every featured recommendation can enter comparison directly');
+  const initialFeatured = await page.locator('[data-featured-id]').evaluateAll(cards => cards.map(card => card.dataset.featuredId));
+  const initialLeader = await page.locator('.hero-leader b').textContent();
+  await page.locator('[data-quick-sort="efficiency"]').click();
+  assert.equal(await page.locator('#sort').inputValue(), 'efficiency', 'hero goal controls immediately re-sort the shelf');
+  assert.equal(await page.locator('[data-quick-sort="efficiency"]').getAttribute('aria-pressed'), 'true', 'selected goal is visibly and accessibly pressed');
+  assert.equal(await page.locator('[data-quick-sort="protein"]').getAttribute('aria-pressed'), 'false', 'inactive goal is not visually represented as selected');
+  assert.notDeepEqual(await page.locator('[data-featured-id]').evaluateAll(cards => cards.map(card => card.dataset.featuredId)), initialFeatured, 'goal selection reorders the visible featured shortlist');
+  assert.notEqual(await page.locator('.hero-leader b').textContent(), initialLeader, 'goal selection changes the visible current leader');
+  await page.selectOption('#sort', 'recommended');
   assert.equal(await page.locator('[data-screen]:visible').count(), 1, 'only one focused screen renders');
   assert.deepEqual(await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => tab.dataset.tab)), ['discover', 'nearby', 'ask', 'saved', 'basket'], 'primary navigation includes Nearby and grounded Ask inside the grocery loop');
   assert.equal(await page.locator('[data-category="Restaurant"]').count(), 0, 'restaurants are not a top-level grocery category');
@@ -32,8 +47,9 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.match(await page.locator('[data-product-id="magic-spoon"] .decision-price').textContent(), /Price unknown/i, 'unsupported package price is not presented as current');
   assert.equal(await page.locator('.role-pill').count(), 0, 'internal ranking labels are not exposed to shoppers');
   assert.equal(await page.locator('link[rel="manifest"]').count(), 1, 'install manifest is linked');
-  assert.equal(await page.locator('[data-product-image]').count(), 3, 'only three exact licensed images are attached');
+  assert.equal(await page.locator('[data-product-id] [data-product-image]').count(), 3, 'only three exact licensed images are attached to catalog cards');
   assert.equal(await page.locator('[data-image-needed]').count(), 9, 'uncertain grocery variants use image-needed states');
+  assert.equal(await page.getByText('Image needed', { exact: true }).count(), 0, 'missing media degrades to a quiet provenance state instead of a dominant error panel');
 
   const imageRecords = await page.locator('[data-product-image]').evaluateAll(images => images.map(image => ({
     src: image.getAttribute('src'), upc: image.dataset.upc, license: image.dataset.imageLicense
@@ -43,6 +59,30 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
     assert.equal(image.license, 'CC BY-SA 3.0', 'exact image carries its license');
     assert.ok(fs.existsSync(path.join(root, image.src)), `local image exists: ${image.src}`);
   }
+
+  const compareIds = ['egg-whites', 'good-culture'];
+  for (const id of compareIds) await page.locator(`[data-compare="${id}"]`).click();
+  assert.match(await page.locator('[data-compare-tray]').textContent(), /2\/3 selected[\s\S]*Ready for a side-by-side decision/, 'comparison tray confirms a decision-ready selection');
+  await page.locator('[data-compare-tray] a[href="#compare"]').click();
+  await page.waitForSelector('[data-screen="compare"] [data-compare-product]');
+  assert.equal(await page.locator('[data-compare-product]').count(), 2, 'comparison aligns two exact products');
+  assert.ok(await page.locator('[data-winner="true"]').count() >= 2, 'comparison marks metric leaders');
+  assert.equal(await page.locator('.compare-recommendation').count(), 1, 'comparison leads with one concise overall recommendation');
+  assert.equal(await page.locator('.compare-recommendation').getAttribute('data-recommendation-id'), 'egg-whites', 'balanced recommendation agrees with the product winning three of four visible metrics');
+  assert.match(await page.locator('.compare-recommendation').textContent(), /wins 3 of 4 visible metrics[\s\S]*calories[\s\S]*value[\s\S]*efficiency/i, 'balanced recommendation explains its visible matrix evidence');
+  assert.equal(await page.locator('.compare-scroll').count(), 0, 'comparison does not require a hidden horizontal gesture');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, 'comparison never overflows the phone viewport');
+  assert.equal(await page.locator('.compare-thumb [data-image-needed]').count(), 2, 'missing comparison imagery uses compact identity tiles');
+  await page.locator('a[href="#discover"]').first().click();
+  await page.locator('[data-clear-compare]').click();
+  await page.locator('[data-quick-sort="protein"]').click();
+  for (const id of compareIds) await page.locator(`[data-compare="${id}"]`).click();
+  await page.locator('[data-compare-tray] a[href="#compare"]').click();
+  assert.equal(await page.locator('.compare-recommendation').getAttribute('data-recommendation-id'), 'good-culture', 'most-protein goal explicitly changes the comparison recommendation');
+  assert.match(await page.locator('.compare-recommendation').textContent(), /Most protein goal[\s\S]*14g/i, 'goal-aware recommendation states the exact winning criterion');
+  await page.locator('a[href="#discover"]').first().click();
+  await page.locator('[data-clear-compare]').click();
+  await page.selectOption('#sort', 'recommended');
 
   await page.locator('[data-tab="ask"]').click();
   await page.fill('#askInput', 'best protein cereal');
