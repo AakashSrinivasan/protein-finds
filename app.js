@@ -108,7 +108,8 @@ function showToast(message, action = null) {
 
 function imageMarkup(product, detail = false) {
   if (!product.image) {
-    return `<div class="image-needed" data-image-needed><b>Image needed</b><small>No exact licensed image is attached to this variant.</small></div>`;
+    const initials = product.brand.split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase();
+    return `<div class="image-needed" data-image-needed><span aria-hidden="true">${escapeHtml(initials)}</span><small>Exact package photo unavailable</small></div>`;
   }
   const image = product.image;
   return `<img src="${image.path}" alt="Exact package front: ${image.variant}" data-product-image data-upc="${image.upc}" data-image-license="${image.license}" ${detail ? '' : 'loading="lazy"'}>`;
@@ -281,8 +282,8 @@ function renderNearby() {
   if (state.locationView === 'map') requestAnimationFrame(() => initializeNearbyMap(stores));
 }
 
-function featuredCard(product, index) {
-  const label = ['Protein leader', 'Smart snack', 'Classic main'][index] || 'Top catalog pick';
+function featuredCard(product, index, goal) {
+  const label = index === 0 ? `${goal.short} leader` : `#${index + 1} for ${goal.short.toLowerCase()}`;
   return `<article class="featured-card" data-featured-id="${product.id}">
     <a class="featured-media" href="#product/${product.id}" aria-label="View ${product.name}">${imageMarkup(product)}</a>
     <div class="featured-copy"><span>${label}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><div><b>${product.protein}g</b><small>protein</small><b>${product.calories}</b><small>cal</small></div></div>
@@ -297,7 +298,15 @@ function compareTrayMarkup() {
 
 function renderDiscover() {
   const list = filteredProducts();
-  const featured = ['beyond-steak', 'quest-cookie', 'boca-original'].map(byId).filter(Boolean);
+  const goals = {
+    recommended: { short: 'Best fit', title: 'Balanced shelf', reason: 'Balances protein, efficiency, role, value evidence, and exact imagery.' },
+    protein: { short: 'Protein', title: 'Highest protein first', reason: 'Ranks seeded protein grams from highest to lowest.' },
+    efficiency: { short: 'Lean', title: 'Most protein per calorie', reason: 'Ranks grams of protein per 100 seeded calories.' },
+    price: { short: 'Value', title: 'Lowest seeded cost', reason: 'Ranks known seeded cost per 25g; unknown prices follow.' }
+  };
+  const goal = goals[state.sort] || goals.recommended;
+  const featured = list.slice(0, 3);
+  const leader = list[0];
   const categories = Object.keys(categoryFilters);
   const forcedState = state.dataState;
   let content;
@@ -305,8 +314,8 @@ function renderDiscover() {
   else if (forcedState === 'empty' || !list.length) content = stateMarkup('empty');
   else content = `${['offline', 'stale'].includes(forcedState) ? stateMarkup(forcedState) : ''}<p class="results-meta">${list.length} seeded products · exact package images only where rights and variant identity are recorded</p><div class="product-list">${list.map(productCard).join('')}</div>`;
   app.innerHTML = `<section class="screen discover-screen" data-screen="discover">
-    <section class="discover-hero"><div class="hero-orbit" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">Vegetarian protein, decoded</p><h1 id="screenTitle">Build a better<br><em>grocery run.</em></h1><p>Compare the shelf by protein, calories, value, and store—then turn the winners into one practical trip.</p><div class="hero-actions"><button type="button" data-quick-sort="protein">Most protein</button><button type="button" data-quick-sort="efficiency">Leanest picks</button><button type="button" data-quick-sort="price">Best value</button></div><div class="hero-proof"><span><b>12</b> grocery finds</span><span><b>3</b> exact images</span><span><b>0</b> invented claims</span></div></section>
-    <section class="featured-section"><div class="section-title"><div><p class="eyebrow">Start with the standouts</p><h2>Top shelf decisions</h2></div><span>Swipe →</span></div><div class="featured-rail">${featured.map(featuredCard).join('')}</div></section>
+    <section class="discover-hero"><div class="hero-orbit" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">Vegetarian protein, decoded</p><h1 id="screenTitle">Build a better<br><em>grocery run.</em></h1><p>Choose a goal and see the shelf, shortlist, and current leader change together.</p><div class="hero-actions" aria-label="Shopping goal">${[['protein','Most protein'],['efficiency','Leanest picks'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>${leader ? `<div class="hero-leader" aria-live="polite"><span>${goal.title}</span><b>${leader.name}</b><small>${leader.protein}g protein · ${leader.calories} cal · ${hasKnownPrice(leader) ? `${money(leader.pricePer25)} seeded / 25g` : 'price unknown'}</small></div>` : ''}</section>
+    ${featured.length ? `<section class="featured-section"><div class="section-title"><div><p class="eyebrow">Goal-matched shortlist</p><h2>${goal.title}</h2><small>${goal.reason}</small></div><span>Swipe →</span></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : ''}
     <div class="freshness compact-freshness">Demo records · seeded 2026-08-13 · not live price or inventory</div>
     <div class="discovery-tools">
       <label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" value="${state.search.replaceAll('"', '&quot;')}" aria-label="Search products" placeholder="Search products"></label>
@@ -380,8 +389,9 @@ function renderCompare() {
   const lowestCalories = Math.min(...items.map(product => product.calories));
   const knownValues = items.filter(hasKnownPrice).map(product => product.pricePer25);
   const lowestValue = knownValues.length ? Math.min(...knownValues) : null;
-  const cell = (value, label, winner = false) => `<div class="compare-cell" ${winner ? 'data-winner="true"' : ''}><b>${value}</b><span>${label}</span>${winner ? '<i>Best</i>' : ''}</div>`;
-  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="#discover">← Back to Discover</a>${screenHead('Side-by-side decision', 'Pick the basket winner', 'The same seeded catalog fields, aligned so the trade-offs are obvious.')}<div class="compare-scroll"><div class="compare-grid" style="--compare-count:${items.length}">${items.map(product => `<article class="compare-column" data-compare-product="${product.id}"><button type="button" data-compare="${product.id}" aria-label="Remove ${product.name} from comparison">×</button><a class="compare-image" href="#product/${product.id}">${imageMarkup(product)}</a><p class="eyebrow">${productVerdict(product)}</p><h2><a href="#product/${product.id}">${product.name}</a></h2><p class="compare-brand">${product.brand}</p>${cell(`${product.protein}g`, 'protein', product.protein === highestProtein)}${cell(product.calories, 'calories', product.calories === lowestCalories)}${cell(hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', 'seeded / 25g', lowestValue !== null && product.pricePer25 === lowestValue)}${cell(product.efficiency, 'g / 100 cal')}<div class="compare-story"><b>Best use</b><p>${product.use}</p><b>Trade-off</b><p>${product.tradeoff}</p></div><p class="compare-store">${product.stores[0] || 'Store unknown'}<small>${product.availabilityLabel}</small></p><button class="primary" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></article>`).join('')}</div></div><aside class="compare-footnote">Best labels compare only these selected seeded records. Price and inventory are not live.</aside></section>`;
+  const recommended = [...items].sort((a, b) => scoreProduct(b) - scoreProduct(a))[0];
+  const matrixRow = (label, value, winner) => `<div class="compare-matrix-row"><b>${label}</b>${items.map(product => `<span ${winner(product) ? 'data-winner="true"' : ''}>${value(product)}${winner(product) ? '<i>Best</i>' : ''}</span>`).join('')}</div>`;
+  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="#discover">← Back to Discover</a>${screenHead('Side-by-side decision', 'Pick the basket winner', 'A phone-sized decision summary first; exact product detail follows without a hidden sideways gesture.')}<aside class="compare-recommendation"><span>Best balanced pick from these records</span><h2>${recommended.name}</h2><p>${recommended.protein}g protein at ${recommended.calories} calories. ${recommended.use}</p><a class="primary" href="#product/${recommended.id}">Review recommendation</a></aside><div class="compare-matrix" style="--compare-count:${items.length}"><div class="compare-matrix-head"><b>Metric</b>${items.map(product => `<a href="#product/${product.id}">${product.name}</a>`).join('')}</div>${matrixRow('Protein', product => `${product.protein}g`, product => product.protein === highestProtein)}${matrixRow('Calories', product => product.calories, product => product.calories === lowestCalories)}${matrixRow('Value / 25g', product => hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', product => lowestValue !== null && product.pricePer25 === lowestValue)}${matrixRow('Efficiency', product => product.efficiency, product => product.efficiency === Math.max(...items.map(item => item.efficiency)))}</div><div class="compare-pick-list">${items.map(product => `<article class="compare-pick" data-compare-product="${product.id}"><button type="button" data-compare="${product.id}" aria-label="Remove ${product.name} from comparison">×</button><a class="compare-thumb" href="#product/${product.id}" aria-label="Open ${escapeHtml(product.name)} details">${imageMarkup(product)}</a><div class="compare-pick-copy"><p class="eyebrow">${productVerdict(product)}</p><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><dl><div><dt>Best use</dt><dd>${product.use}</dd></div><div><dt>Trade-off</dt><dd>${product.tradeoff}</dd></div></dl><button class="primary" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></div></article>`).join('')}</div><aside class="compare-footnote">Best labels compare only these selected seeded records. Price and inventory are not live.</aside></section>`;
 }
 
 function renderBasket() {
@@ -488,8 +498,7 @@ document.addEventListener('click', event => {
   if (quickSort) {
     state.sort = quickSort.dataset.quickSort;
     persist(); renderDiscover();
-    requestAnimationFrame(() => document.querySelector('.catalog-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-    showToast(`Shelf sorted by ${quickSort.textContent.toLowerCase()}`);
+    liveRegion.textContent = `Shelf sorted by ${quickSort.textContent.toLowerCase()}`;
     return;
   }
   const add = event.target.closest('[data-add]');

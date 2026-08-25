@@ -36,7 +36,10 @@ async function auditAxe(page, name, axeSource) {
 
   assert.ok(await page.locator('[data-featured-id]').first().boundingBox().then(box => box && box.y < 844));
   assert.equal(await page.locator('[data-featured-id]').first().locator('[data-product-image]').isVisible(), true);
-  pass('first-viewport-product', 'decision hero and an exact licensed featured product are visible at 390×844');
+  const firstFeaturedCopy = await page.locator('[data-featured-id]').first().locator('.featured-copy').boundingBox();
+  const mobileNavBox = await page.locator('[data-bottom-nav]').boundingBox();
+  assert.ok(firstFeaturedCopy && mobileNavBox && firstFeaturedCopy.y < mobileNavBox.y, 'featured product name and metrics begin before fixed navigation');
+  pass('first-viewport-product', 'decision hero plus an exact product name and metrics are visible at 390×844');
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(element => getComputedStyle(element).position), 'fixed');
   pass('persistent-bottom-navigation', 'five focused grocery-loop destinations, including Nearby and Ask, remain fixed');
 
@@ -58,14 +61,17 @@ async function auditAxe(page, name, axeSource) {
   await page.locator('[data-remove]').first().click();
   await page.locator('[data-tab="discover"]').click();
 
-  const compareIds = await page.locator('[data-product-id]').evaluateAll(cards => cards.slice(0, 2).map(card => card.dataset.productId));
+  const compareIds = ['egg-whites', 'good-culture'];
   for (const id of compareIds) await page.locator(`[data-compare="${id}"]`).click();
   await page.locator('[data-compare-tray] a[href="#compare"]').click();
   await page.waitForSelector('[data-screen="compare"] [data-compare-product]');
   await auditAxe(page, 'mobile-comparison', axeSource);
   assert.equal(await page.locator('[data-compare-product]').count(), 2, 'comparison renders selected products only');
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, 'comparison contains horizontal scrolling without body overflow');
-  pass('comparison-loop', 'two selected products align decision metrics, leaders, stores, trade-offs, and basket actions');
+  assert.equal(await page.locator('.compare-scroll').count(), 0, 'comparison has no hidden horizontal comparison gesture');
+  assert.equal(await page.locator('.compare-recommendation').count(), 1, 'comparison leads with one overall recommendation');
+  assert.equal(await page.locator('.compare-thumb [data-image-needed]').count(), 2, 'missing package images collapse into compact identity tiles');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, 'comparison fits the phone viewport without body overflow');
+  pass('comparison-loop', 'two products fit a mobile-native metric matrix, recommendation, compact truth states, trade-offs, and basket actions');
   await page.locator('a[href="#discover"]').first().click();
   await page.locator('[data-clear-compare]').click();
 

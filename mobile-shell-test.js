@@ -23,6 +23,9 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
   assert.equal(await page.locator('[data-screen]:visible').count(), 1, `${label}: one focused screen`);
   assert.equal(await page.locator('[data-bottom-nav]').evaluate(el => getComputedStyle(el).position), 'fixed', `${label}: bottom nav stays fixed`);
   assert.ok(await page.locator('[data-featured-id]').first().boundingBox().then(box => box && box.y < viewport.height), `${label}: featured product is in first viewport`);
+  const featuredCopy = await page.locator('[data-featured-id]').first().locator('.featured-copy').boundingBox();
+  const navigationBox = await page.locator('[data-bottom-nav]').boundingBox();
+  assert.ok(featuredCopy && navigationBox && featuredCopy.y < navigationBox.y, `${label}: product name and decision metrics begin above navigation`);
   assert.ok(await page.locator('.freshness').isVisible(), `${label}: demo/not-live data status remains visible`);
   const firstImage = page.locator('[data-featured-id]').first().locator('[data-product-image]');
   assert.equal(await firstImage.getAttribute('data-image-license'), 'CC BY-SA 3.0', `${label}: first card uses licensed exact package image`);
@@ -88,11 +91,26 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
   await browser.close();
 }
 
+async function assertDesktopComposition() {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const navigationBox = await page.locator('[data-bottom-nav]').boundingBox();
+  assert.ok(navigationBox && navigationBox.y < 160 && navigationBox.y + navigationBox.height < 700, 'desktop: navigation becomes a compact side rail instead of a full-width bottom bar');
+  assert.equal(await page.locator('[data-featured-id]').count(), 3, 'desktop: three goal-matched decisions compose above the fold');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1), false, 'desktop: no horizontal overflow');
+  await browser.close();
+}
+
 (async () => {
   await assertShell(webkit, { width: 390, height: 844 }, 'WebKit portrait', 'first-viewport-portrait-390x844.png', 'grocery-loop-basket-390x844.png');
   await assertShell(webkit, { width: 844, height: 390 }, 'WebKit landscape', 'first-viewport-landscape-844x390.png');
   await assertShell(chromium, { width: 390, height: 844 }, 'Chromium standalone contract');
-  console.log('PASS: focused app shell, licensed exact imagery, routes, Back/scroll restoration, states, 44px targets, portrait/landscape WebKit, overflow, and console checks');
+  await assertDesktopComposition();
+  console.log('PASS: focused app shell, licensed exact imagery, routes, Back/scroll restoration, states, 44px targets, portrait/landscape WebKit, desktop side rail, overflow, and console checks');
 })().catch(error => {
   console.error(error);
   process.exit(1);
