@@ -16,7 +16,9 @@ const assert = require('node:assert/strict');
   await page.waitForSelector('[data-screen="discover"] [data-featured-id]');
   await page.evaluate(async () => { if ('serviceWorker' in navigator) await navigator.serviceWorker.ready; });
   assert.ok(context.serviceWorkers().some(worker => new URL(worker.url()).pathname.endsWith('/service-worker.js')), 'service worker controls the app');
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-product-image]')].some(image => image.complete && image.naturalWidth > 0));
 
+  await page.locator('.header-menu summary').click();
   await page.locator('#installButton').click();
   assert.match(await page.locator('#liveRegion').textContent(), /iPhone Safari.*Share.*Add to Home Screen.*Android Chrome.*Install app/, 'install guidance covers iPhone and Android');
 

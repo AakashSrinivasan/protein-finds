@@ -57,6 +57,8 @@ const state = {
   screenerBuilderOpen: matchMedia('(min-width: 700px) and (min-height: 501px)').matches,
   savedScreens: Array.isArray(stored.savedScreens) ? stored.savedScreens.filter(item => item && typeof item.name === 'string' && item.screen).slice(0, 12) : [],
   defaultScreenId: typeof stored.defaultScreenId === 'string' ? stored.defaultScreenId : null,
+  filterSheetOpen: false,
+  compareMode: false,
   compareContext: storedCompareContext,
   sightings: storedSightings
 };
@@ -64,11 +66,12 @@ let currentRoute = null;
 let deferredInstallPrompt = null;
 let nearbyMap = null;
 let toastTimer = null;
+let filterTrigger = null;
 
 const money = value => `$${Number(value).toFixed(2)}`;
 const byId = id => groceryProducts.find(product => product.id === id);
 const hasKnownPrice = product => product.availability !== 'demo-unavailable' && Number.isFinite(product.price);
-const priceLabel = product => hasKnownPrice(product) ? `${money(product.price)} demo pack` : 'Price unknown';
+const priceLabel = product => hasKnownPrice(product) ? `${money(product.price)} per package` : 'Price unknown';
 const numberLabel = (value, suffix = '') => Number.isFinite(value) ? `${value}${suffix}` : 'Unknown';
 const textLabel = value => typeof value === 'string' && value.trim() ? value : 'Unknown';
 const productVerdict = product => product.role === 'anchor' ? 'Strong main protein' : 'Useful supporting pick';
@@ -126,7 +129,7 @@ function parseRoute() {
   const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (hash.startsWith('product/')) return { name: 'product', id: hash.slice(8) };
   const name = hash.split('?')[0];
-  return { name: ['discover', 'screener', 'nearby', 'ask', 'saved', 'basket', 'compare'].includes(name) ? name : 'discover' };
+  return { name: ['discover', 'screener', 'nearby', 'saved', 'basket', 'compare'].includes(name) ? name : 'discover' };
 }
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
@@ -173,15 +176,15 @@ function productCard(product) {
   const value = product.exactSku ? 'Price unknown' : hasKnownPrice(product) ? money(product.pricePer25) : 'Price unknown';
   const exactHandoff = product.exactSku?.retailerHandoffs?.find(handoff => handoff.type === 'exact-product');
   const storeSearch = product.exactSku?.retailerHandoffs?.find(handoff => handoff.type === 'retailer-search');
-  const storeTruth = exactHandoff ? `${exactHandoff.retailer} · exact order handoff` : storeSearch ? `${storeSearch.retailer} · catalog-only search` : `${product.stores[0] || 'Store unknown'} · ${product.availabilityLabel}`;
-  const freshnessTruth = exactHandoff ? `Unknown inventory · price unknown · checked ${exactHandoff.checkedAt}` : storeSearch ? `Unknown inventory · checked ${storeSearch.checkedAt}` : 'Stale seed · checked 2026-08-13 · inventory unknown';
+  const storeTruth = exactHandoff ? `Check ${exactHandoff.retailer}` : storeSearch ? `Search ${storeSearch.retailer}` : `${product.stores[0] || 'Store unknown'}`;
+  const freshnessTruth = exactHandoff ? `Price and stock unknown · checked ${exactHandoff.checkedAt}` : storeSearch ? `Stock unknown · checked ${storeSearch.checkedAt}` : 'Product info checked Aug 13';
   return `<article class="product-card" data-product-id="${product.id}">
     <div class="product-media">${imageMarkup(product)}</div>
     <div class="product-copy">
       <p class="decision-verdict"><b>${productVerdict(product)}</b></p>
       <h2><a class="product-link" href="#product/${product.id}">${product.name}</a></h2>
       <p class="brand-line">${product.brand} · ${product.category}</p>
-      <div class="card-decision-strip"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div class="decision-price"><b>${value}</b><span>${product.exactSku ? 'store price' : 'seeded / 25g'}</span></div></div>
+      <div class="card-decision-strip"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div class="decision-price"><b>${value}</b><span>${product.exactSku ? 'store price' : 'per 25g protein'}</span></div></div>
       <p class="decision-store"><b>${storeTruth}</b></p>
       <p class="decision-freshness">${freshnessTruth}</p>
       ${nearby ? `<p class="nearby-product"><b>${nearby.name}</b> · ${nearby.distanceMiles.toFixed(1)} mi · unknown inventory</p>` : ''}
@@ -199,10 +202,10 @@ function screenHead(eyebrow, title, description) {
 function stateMarkup(kind) {
   const states = {
     empty: ['∅', 'Nothing matches yet', 'Try another search or clear the category. Protein Finds will not invent a product.', 'Clear filters'],
-    loading: ['…', 'Loading protein finds', 'Preparing the seeded catalog and your saved trip.', ''],
+    loading: ['…', 'Loading protein finds', 'Getting your products and saved trip ready.', ''],
     error: ['!', 'The catalog did not load', 'Your saved trip is untouched. Retry the local catalog.', 'Retry'],
     offline: ['↯', 'You are offline', 'The cached catalog remains available after the first visit. Live source links need a connection.', 'Use cached catalog'],
-    stale: ['◷', 'Catalog needs a fresh check', 'These demo records were seeded on 2026-08-13. Re-check the exact source before buying.', 'Continue with demo']
+    stale: ['◷', 'Some product info is old', 'Details were last checked on August 13. Check the store before buying.', 'Keep browsing']
   };
   const [icon, title, copy, action] = states[kind];
   if (kind === 'loading') return `<section class="state-card" data-state="loading" role="status"><div class="state-icon">${icon}</div><h2>${title}</h2><p>${copy}</p><div class="loading-lines"><i></i><i></i><i></i></div></section>`;
@@ -283,7 +286,7 @@ function mapMarkup(stores) {
     <button class="map-recenter" type="button" data-map-recenter aria-label="Recenter map on ${state.location ? state.location.label : 'Foster City'}">◎</button>
     <button class="primary search-here" type="button" data-search-here ${state.mapMoved ? '' : 'disabled'}>Search this area</button>
     <div class="map-store-sheet" aria-live="polite">${selectedIndex >= 0 ? `<div class="sheet-heading"><span aria-hidden="true"></span><b>Selected grocery store</b></div>${storeCard(stores[selectedIndex], selectedIndex)}` : '<p>Tap a grocery marker to compare distance, catalog matches, and product details.</p>'}</div>
-    <p class="map-fallback">© OpenStreetMap contributors · store coordinates are seeded fixtures · proximity never means in stock.</p>
+    <p class="map-fallback">© OpenStreetMap contributors · store locations are for this preview · proximity does not mean a product is in stock.</p>
   </div>`;
 }
 
@@ -353,9 +356,9 @@ function renderNearby() {
   const message = state.locationMessage ? `<p class="location-message" role="${state.locationStatus === 'searching' ? 'status' : 'alert'}">${state.locationMessage}</p>` : '';
   app.innerHTML = `<section class="screen nearby-screen" data-screen="nearby">
     ${screenHead('Grocery map', 'Protein near you', 'Fast switching between one store list and one synchronized map, built for grocery decisions.')}
-    <div class="freshness">Coordinates are fixtures · inventory is never inferred from distance</div>
+    <div class="freshness">Plan your route here, then check the retailer before you go.</div>
     <section class="location-card" data-location-status="${state.locationStatus}">
-      <form id="locationForm" class="location-form"><label for="zipInput">Search a ZIP</label><div><input id="zipInput" name="zip" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{5}(-[0-9]{4})?" placeholder="94404" aria-describedby="zipHelp"><button class="primary" type="submit">Go</button></div><small id="zipHelp">Foster City is the first indexed market. Bay Area demo ZIPs also remain available.</small></form>
+      <form id="locationForm" class="location-form"><label for="zipInput">Search a ZIP</label><div><input id="zipInput" name="zip" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{5}(-[0-9]{4})?" placeholder="94404" aria-describedby="zipHelp"><button class="primary" type="submit">Go</button></div><small id="zipHelp">Showing nearby stores around Foster City.</small></form>
       <button class="secondary current-location" type="button" data-use-location ${state.locationStatus === 'searching' ? 'disabled' : ''}>Use current location</button>
       ${message}
       <div class="nearby-toolbar"><div class="location-heading"><b>${ready ? state.location.label : 'Foster City'}</b><span>${stores.length} stores sorted by distance</span></div><div class="view-toggle" aria-label="Store results view"><button type="button" data-location-view="map" aria-pressed="${state.locationView === 'map'}">⌖ Map</button><button type="button" data-location-view="list" aria-pressed="${state.locationView === 'list'}">☷ List</button></div></div>
@@ -387,27 +390,29 @@ function renderDiscover() {
   const exactCount = groceryProducts.filter(product => product.exactSku).length;
   const blockingState = ['loading', 'error', 'empty'].includes(state.dataState);
   const visibleState = ['loading', 'error', 'empty', 'offline', 'stale'].includes(state.dataState) ? stateMarkup(state.dataState) : '';
-  app.innerHTML = `<section class="screen discover-screen" data-screen="discover">
-    <header class="home-intro"><p class="eyebrow">Your vegetarian protein field guide</p><h1 id="screenTitle">Find the protein<br><em>worth buying.</em></h1><p>Fast answers from exact products, clear trade-offs, and nearby store paths.</p></header>
-    <a class="home-search" href="#screener"><span aria-hidden="true">⌕</span><b>What protein are you looking for?</b><i aria-hidden="true">→</i></a>
-    <a class="home-location" href="#nearby"><span aria-hidden="true">⌖</span><div><small>Shopping near</small><b>Foster City · 94404</b></div><i>${locationData.STORES.length} stores →</i></a>
+  app.innerHTML = `<section class="screen discover-screen consumer-home" data-screen="discover">
+    <header class="home-intro"><div><p>Vegetarian protein</p><h1 id="screenTitle">What sounds good?</h1></div><a href="#nearby"><b>Foster City · 94404</b><small>Change location</small></a></header>
+    <a class="home-search" href="#screener"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><b>Search protein, brands, or stores</b></a>
     <div class="hero-actions home-goals" aria-label="Shopping goal">${[['protein','Most protein'],['efficiency','Leanest'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>
     ${visibleState}
-    ${!blockingState && featured.length ? `<section class="featured-section home-recommendations"><div class="section-title"><div><p class="eyebrow">Picked for your goal</p><h2>${goal.title}</h2><small>${goal.reason}</small></div><span>Swipe →</span></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : (!visibleState ? stateMarkup('empty') : '')}
-    <section class="home-utility-grid" aria-label="Explore Protein Finds"><a href="#nearby"><span>⌖</span><small>Nearby now</small><b>Browse ${locationData.STORES.length} Foster City stores</b><i>Open map →</i></a><a href="#screener"><span>✦</span><small>Search the shelf</small><b>${groceryProducts.length} products · ${exactCount} exact packages</b><i>Filter finds →</i></a></section>
-    <details class="surface-truth"><summary>Data freshness and coverage</summary><p>This is a bounded alpha catalog, not a comprehensive market view. Prices and inventory are not live; exact package photos appear only when identity and rights are known.</p></details>
+    ${!blockingState && featured.length ? `<section class="featured-section home-recommendations"><div class="section-title"><div><h2>Top picks</h2><small>${goal.title}</small></div><a href="#screener">See all</a></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : (!visibleState ? stateMarkup('empty') : '')}
+    <a class="home-nearby-row" href="#nearby"><span>Nearby</span><b>Browse ${locationData.STORES.length} Foster City stores</b><i>→</i></a>
+    <details class="surface-truth"><summary>About product info</summary><p>Prices and inventory may be out of date. Open a product to see when its source was last checked.</p></details>
   </section>`;
 }
 
 function screenerResultMarkup(product, rank) {
-  const value = productScreener.hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown';
+  const value = productScreener.hasKnownPrice(product) ? money(product.pricePer25) : '—';
   const comparing = state.compare.has(product.id);
   const inBasket = state.basket.includes(product.id);
-  return `<article class="screen-result" data-screen-result="${product.id}">
-    <div class="screen-rank" aria-label="Result rank ${rank}">${rank}</div>
-    <div class="screen-product"><p>${escapeHtml(textLabel(product.brand))}</p><h3><a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a></h3><small>${escapeHtml(textLabel(product.category))} · ${escapeHtml(textLabel(product.prep))}</small></div>
-    <div class="screen-result-metrics"><div class="screen-metric"><b>${numberLabel(product.protein, 'g')}</b><span>protein</span></div><div class="screen-metric"><b>${numberLabel(product.calories)}</b><span>calories</span></div><div class="screen-metric"><b>${numberLabel(product.efficiency)}</b><span>g / 100 cal</span></div><div class="screen-metric"><b>${value}</b><span>seeded / 25g</span></div></div>
-    <div class="screen-result-actions"><a class="secondary" href="#product/${escapeHtml(product.id)}">Details</a><button class="secondary" type="button" data-compare="${escapeHtml(product.id)}" aria-pressed="${comparing}">${comparing ? 'Comparing' : 'Compare'}</button><button class="primary" type="button" data-add="${escapeHtml(product.id)}" ${inBasket ? 'disabled' : ''}>${inBasket ? 'Added' : 'Add'}</button></div>
+  const store = product.exactSku?.retailerHandoffs?.[0]?.retailer || product.stores?.[0] || 'Store unknown';
+  return `<article class="screen-result search-product-card" data-screen-result="${product.id}" data-product-id="${product.id}">
+    <a class="search-product-media" href="#product/${escapeHtml(product.id)}" aria-label="View ${escapeHtml(product.name)}">${imageMarkup(product)}</a>
+    <div class="screen-product"><p>${escapeHtml(textLabel(product.brand))}</p><h3><a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a></h3><small>${escapeHtml(productVerdict(product))}</small></div>
+    <button class="save-button" type="button" data-save="${escapeHtml(product.id)}" aria-label="${state.saved.has(product.id) ? 'Remove' : 'Save'} ${escapeHtml(product.name)}" aria-pressed="${state.saved.has(product.id)}">${state.saved.has(product.id) ? '♥' : '♡'}</button>
+    <div class="screen-result-metrics"><div class="screen-metric"><b>${numberLabel(product.protein, 'g')}</b><span>Protein</span></div><div class="screen-metric"><b>${numberLabel(product.calories)}</b><span>Calories</span></div><div class="screen-metric"><b>${value}</b><span>per 25g protein</span></div></div>
+    <p class="search-store"><b>${escapeHtml(store)}</b><span>Product info checked ${product.exactSku?.nutritionCheckedAt || 'Aug 13'}</span></p>
+    <div class="screen-result-actions">${state.compareMode ? `<button class="compare-select" type="button" data-compare="${escapeHtml(product.id)}" aria-pressed="${comparing}">${comparing ? 'Selected' : 'Compare'}</button>` : ''}<button class="primary" type="button" data-add="${escapeHtml(product.id)}" ${inBasket ? 'disabled' : ''}>${inBasket ? 'Added' : 'Add'}</button></div>
   </article>`;
 }
 
@@ -425,13 +430,13 @@ function renderLegacyScreener() {
     : '<span class="screen-no-criteria">No filters yet · showing the complete grocery seed</span>';
   const results = run.results.length
     ? `<div class="screen-page-summary" data-screen-page-summary>Showing ${pagination.start}–${pagination.end} of ${pagination.totalResults}</div><div class="screen-result-head" aria-hidden="true"><span>#</span><span>Product</span><span>Protein</span><span>Calories</span><span>Efficiency</span><span>Value</span><span>Actions</span></div><div class="screen-results">${pagination.items.map((product, index) => screenerResultMarkup(product, pagination.start + index)).join('')}</div>${pagination.pageCount > 1 ? `<nav class="screen-pagination" aria-label="Screener result pages"><button type="button" data-screen-page="${pagination.page - 1}" ${pagination.page === 1 ? 'disabled' : ''}>← Previous</button><span>Page ${pagination.page} of ${pagination.pageCount}</span><button type="button" data-screen-page="${pagination.page + 1}" ${pagination.page === pagination.pageCount ? 'disabled' : ''}>Next →</button></nav>` : ''}`
-    : `<div class="empty-card screen-empty"><span class="state-icon">∅</span><h2>No products match all of that</h2><p>Remove one criterion to widen the screen. Protein Finds will not invent a match.</p><button class="primary" type="button" data-screen-reset>Clear screen</button></div>`;
+    : `<div class="empty-card screen-empty"><span class="state-icon">∅</span><h2>No products match all of that</h2><p>Remove a filter to see more options.</p><button class="primary" type="button" data-screen-reset>Clear filters</button></div>`;
 
   app.innerHTML = `<section class="screen screener-screen" data-screen="screener">
     ${screenHead('Search the shelf', 'What are you looking for?', 'Ask naturally or use precise filters. Every answer stays grounded in the current catalog.')}
     <form class="ask-form search-ask-form" id="searchAskForm"><label for="searchAskInput">Describe what you want</label><div><input id="searchAskInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="High-protein soy-free snack"><button class="primary" type="submit" aria-label="Search with natural language">↑</button></div></form>
     <div class="prompt-row search-prompts" aria-label="Quick natural-language searches">${['cheap breakfast protein','soy-free snacks','best protein cereal'].map(prompt => `<button type="button" data-search-prompt="${prompt}">${prompt}</button>`).join('')}</div>
-    ${state.askAnswer ? `<section class="search-answer" aria-live="polite"><div class="ask-summary"><span class="agent-avatar" aria-hidden="true">PF</span><div><b>${escapeHtml(state.askAnswer.summary)}</b><span>Catalog-grounded results; stock and price remain labeled unknown or seeded.</span></div></div>${state.askAnswer.recommendations.slice(0, 2).map(askRecommendationMarkup).join('')}</section>` : ''}
+    ${state.askAnswer ? `<section class="search-answer" aria-live="polite"><div class="ask-summary"><span class="agent-avatar" aria-hidden="true">PF</span><div><b>${escapeHtml(state.askAnswer.summary)}</b><span>Based on our current product list. Check store price and stock before shopping.</span></div></div>${state.askAnswer.recommendations.slice(0, 2).map(askRecommendationMarkup).join('')}</section>` : ''}
     <div class="screener-presets" aria-label="Quick screens"><button type="button" data-screen-template="high-protein">20g+ under 200 cal</button><button type="button" data-screen-template="soy-free">Soy-free standouts</button><button type="button" data-screen-template="ready-now">Ready-now 10g+</button></div>
     <div class="screener-workspace">
       <details class="screen-builder" id="screenBuilder" ${state.screenerBuilderOpen ? 'open' : ''}>
@@ -450,7 +455,7 @@ function renderLegacyScreener() {
         ${results}
       </section>
     </div>
-    <details class="surface-truth screen-truth"><summary>Coverage and data policy</summary><p>This proves the screening workflow against ${run.total} grocery records—not a comprehensive market database. Every result is an existing catalog record. Prices are seeded, inventory is not live, and unsupported fields are not offered as filters.</p></details>
+    <details class="surface-truth screen-truth"><summary>About these results</summary><p>This early catalog includes ${run.total} grocery products. Prices are sample values, store stock is not live, and filters appear only when product information is available.</p></details>
     ${compareTrayMarkup()}
   </section>`;
 }
@@ -462,23 +467,23 @@ function criterionEditor(item) {
   const minValue = item.min ?? range.min;
   const maxValue = item.max ?? range.max;
   return `<article class="criterion-card" data-criterion="${item.key}">
-    <header><div><span>${escapeHtml(definition.label)}</span><small>Catalog range ${range.min}–${range.max} ${escapeHtml(definition.unit)} · ${range.known}/${groceryProducts.length} known</small></div><button type="button" data-remove-criterion="${item.key}" aria-label="Remove ${escapeHtml(definition.label)}">×</button></header>
+    <header><div><span>${escapeHtml(definition.label)}</span><small>Available range: ${range.min}–${range.max} ${escapeHtml(definition.unit)}</small></div><button type="button" data-remove-criterion="${item.key}" aria-label="Remove ${escapeHtml(definition.label)}">×</button></header>
     <div class="criterion-exact"><label>Minimum <span><input type="number" inputmode="decimal" data-criterion-number="min" data-key="${item.key}" min="${range.min}" max="${range.max}" step="${range.step}" value="${item.min ?? ''}" placeholder="Any"><b>${escapeHtml(definition.unit)}</b></span></label><label>Maximum <span><input type="number" inputmode="decimal" data-criterion-number="max" data-key="${item.key}" min="${range.min}" max="${range.max}" step="${range.step}" value="${item.max ?? ''}" placeholder="Any"><b>${escapeHtml(definition.unit)}</b></span></label></div>
     <div class="dual-range" data-range-key="${item.key}"><div class="range-track"></div><input type="range" data-criterion-range="min" data-key="${item.key}" min="${range.min}" max="${range.max}" step="${range.step}" value="${minValue}" aria-label="Minimum ${escapeHtml(definition.label)}"><input type="range" data-criterion-range="max" data-key="${item.key}" min="${range.min}" max="${range.max}" step="${range.step}" value="${maxValue}" aria-label="Maximum ${escapeHtml(definition.label)}"></div>
-    <label class="unknown-toggle"><input type="checkbox" data-criterion-unknown="${item.key}" ${item.includeUnknown ? 'checked' : ''}><span>Include products where ${escapeHtml(definition.label.toLowerCase())} is unknown</span></label>
+    <label class="unknown-toggle"><input type="checkbox" data-criterion-unknown="${item.key}" ${item.includeUnknown ? 'checked' : ''}><span>Show items without ${escapeHtml(definition.label.toLowerCase())} info</span></label>
   </article>`;
 }
 
 function facetEditor(key, screen) {
-  const remove = `<button type="button" class="facet-remove" data-remove-facet="${key}" aria-label="Remove criterion">×</button>`;
+  const remove = `<button type="button" class="facet-remove" data-remove-facet="${key}" aria-label="Remove filter">×</button>`;
   if (key === 'diet') return `<article class="facet-card" data-facet="diet"><header><b>Diet</b>${remove}</header><select data-facet-select="diet"><option value="all">Any vegetarian fit</option><option value="vegetarian" ${screen.diet==='vegetarian'?'selected':''}>Vegetarian</option><option value="vegan" ${screen.diet==='vegan'?'selected':''}>Vegan only</option></select></article>`;
   if (key === 'categories' || key === 'stores' || key === 'prep') {
     const values = key === 'categories' ? screenerCategories() : key === 'stores' ? screenerStores() : ['Ready now','Heat','Cook'];
     const selected = screen[key];
     return `<article class="facet-card" data-facet="${key}"><header><b>${key === 'categories' ? 'Product type' : key === 'stores' ? 'Store' : 'Preparation'}</b>${remove}</header><div class="facet-options">${values.map(value=>`<label><input type="checkbox" data-facet-check="${key}" value="${escapeHtml(value)}" ${selected.includes(value)?'checked':''}><span>${escapeHtml(value)}</span></label>`).join('')}</div></article>`;
   }
-  if (key === 'ingredients') return `<article class="facet-card" data-facet="ingredients"><header><b>Ingredients</b>${remove}</header><div class="text-criteria"><label>Must include<input data-facet-text="ingredientInclude" value="${escapeHtml(screen.ingredientInclude)}" placeholder="e.g. fava"></label><label>Must exclude<input data-facet-text="ingredientExclude" value="${escapeHtml(screen.ingredientExclude)}" placeholder="e.g. stevia"></label></div><small>Ingredient text is source-bound; unknown panels fail closed.</small></article>`;
-  return `<article class="facet-card" data-facet="allergens"><header><b>User-defined allergens</b>${remove}</header><label>Avoid (comma-separated)<input data-facet-text="allergens" value="${escapeHtml(screen.allergens.join(', '))}" placeholder="e.g. sesame, peanut"></label><small>Products without sufficient allergen evidence are excluded.</small></article>`;
+  if (key === 'ingredients') return `<article class="facet-card" data-facet="ingredients"><header><b>Ingredients</b>${remove}</header><div class="text-criteria"><label>Must include<input data-facet-text="ingredientInclude" value="${escapeHtml(screen.ingredientInclude)}" placeholder="e.g. fava"></label><label>Must exclude<input data-facet-text="ingredientExclude" value="${escapeHtml(screen.ingredientExclude)}" placeholder="e.g. stevia"></label></div><small>Products with missing ingredient lists won't be shown.</small></article>`;
+  return `<article class="facet-card" data-facet="allergens"><header><b>Allergens to avoid</b>${remove}</header><label>Separate with commas<input data-facet-text="allergens" value="${escapeHtml(screen.allergens.join(', '))}" placeholder="e.g. sesame, peanut"></label><small>Products with incomplete allergen information won't be shown.</small></article>`;
 }
 
 function syncScreenUrl() {
@@ -495,30 +500,40 @@ function renderScreener() {
   }
   const run = productScreener.run(groceryProducts, state.screener);
   state.screener = run.screen;
+  const pagination = productScreener.paginate(run.results, state.screenerPage, 24);
+  state.screenerPage = pagination.page;
   const clauses = productScreener.clauses(run.screen);
   const activeKeys = new Set(run.screen.criteria.map(item=>item.key));
   const criterionOptions = Object.entries(productScreener.CRITERIA).filter(([key])=>!activeKeys.has(key)&&productScreener.bounds(groceryProducts,key)).map(([key,d])=>`<option value="numeric:${key}">${escapeHtml(d.label)}</option>`).join('');
   const facetLabels = {diet:'Diet',categories:'Product type',stores:'Store',prep:'Preparation',ingredients:'Ingredients',allergens:'User-defined allergens'};
   const facetOptions = Object.entries(facetLabels).filter(([key])=>!run.screen.activeFacets.includes(key)).map(([key,label])=>`<option value="facet:${key}">${label}</option>`).join('');
   const sortOptions = Object.entries(productScreener.SORTS).map(([key,d])=>`<option value="${key}" ${run.screen.sort===key?'selected':''}>${escapeHtml(d.label)}</option>`).join('');
-  const savedScreens = state.savedScreens.length ? state.savedScreens.map(item=>`<button type="button" data-load-screen="${item.id}">${escapeHtml(item.name)}${state.defaultScreenId===item.id?' · default':''}</button>`).join('') : '<span>No saved screens yet</span>';
-  const resultMarkup = run.results.map((product,index)=>{
-    const evaluation=run.evaluations.get(product.id); const base=screenerResultMarkup(product,index+1);
-    return base.replace('</article>',`<p class="match-reason"><b>Why it matched:</b> ${escapeHtml(evaluation.reasons.slice(0,4).join(' · ')||'No restrictive criterion is active')}</p></article>`);
-  }).join('');
-  app.innerHTML = `<section class="screen screener-screen personal-screen" data-screen="screener">
-    ${screenHead('Personal protein screen', 'Build the shelf around you.', 'Choose only the evidence-backed criteria that matter. Every result explains itself.')}
-    <form class="ask-form search-ask-form" id="searchAskForm"><label for="searchAskInput">Describe your exact screen</label><div><input id="searchAskInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="At least 18g protein, under 220 calories, soy-free"><button class="primary" type="submit">Compile</button></div></form>
-    <div class="prompt-row search-prompts">${['best protein cereal','vegan ready-now at Target','20g protein under 200 calories'].map(prompt=>`<button type="button" data-search-prompt="${prompt}">${prompt}</button>`).join('')}</div>
-    <div class="screen-presets" aria-label="Example screens"><button type="button" data-screen-template="high-protein">High protein</button><button type="button" data-screen-template="soy-free">Soy-free</button><button type="button" data-screen-template="ready-now">Ready now</button></div>
-    <section class="screen-control-bar"><label><span>Add a criterion</span><select id="criterionPicker"><option value="">Choose what matters…</option>${criterionOptions}${facetOptions}</select></label><button class="primary" type="button" data-add-criterion>Add criterion</button><button type="button" data-screen-reset>Reset</button></section>
-    <div class="active-screen personal-chips" aria-label="Active criteria">${clauses.length?clauses.map(c=>`<button type="button" data-remove-screen-clause="${escapeHtml(c.key)}">${escapeHtml(c.label)} <span>×</span></button>`).join(''):`<span class="screen-no-criteria">No criteria yet · all ${run.total} catalog products remain</span>`}</div>
-    <div class="criterion-stack">${run.screen.criteria.map(criterionEditor).join('')}${run.screen.activeFacets.map(key=>facetEditor(key,run.screen)).join('')}</div>
-    <section class="saved-screen-tools"><form id="saveScreenForm"><label>Name this screen<input name="name" maxlength="40" placeholder="My weekday breakfast"></label><button class="secondary" type="submit">Save screen</button></form><div class="saved-screen-list">${savedScreens}</div></section>
-    <section class="screen-output" aria-live="polite"><div class="screen-output-head"><div><p class="eyebrow">Live evidence-backed matches</p><h2><b data-screen-result-count>${run.results.length}</b> of ${run.total}</h2><small>${run.excludedUnknownCount} excluded because an active field was unknown</small></div><div class="output-controls"><label>Sort<select id="screenSort">${sortOptions}</select></label><div><button type="button" data-density="list" aria-pressed="${run.screen.density==='list'}">List</button><button type="button" data-density="grid" aria-pressed="${run.screen.density==='grid'}">Grid</button></div></div></div><div class="screen-results" data-density="${run.screen.density}">${resultMarkup||`<div class="empty-card screen-empty"><h2>No evidenced match</h2><p>Widen a range or explicitly include unknowns. The engine will not fabricate a fit.</p></div>`}</div></section>
-    <details class="surface-truth screen-truth"><summary>Evidence and unknown policy</summary><p>Numeric criteria are offered only for fields present in this catalog. Unknown values are excluded by default under active constraints; each criterion can explicitly include them. Prices and availability remain seeded or unknown—not live.</p></details>
+  const savedScreens = state.savedScreens.map(item=>`<button type="button" data-load-screen="${item.id}">${escapeHtml(item.name)}</button>`).join('');
+  const resultMarkup = pagination.items.map((product,index)=>screenerResultMarkup(product,pagination.start+index)).join('');
+  const pageControls = pagination.pageCount > 1 ? `<nav class="screen-pagination" aria-label="Search result pages"><button type="button" data-screen-page="${pagination.page-1}" ${pagination.page===1?'disabled':''}>Previous</button><span>Page ${pagination.page} of ${pagination.pageCount}</span><button type="button" data-screen-page="${pagination.page+1}" ${pagination.page===pagination.pageCount?'disabled':''}>Next</button></nav>` : '';
+  const activeChips = clauses.length ? clauses.map(c=>`<button type="button" data-remove-screen-clause="${escapeHtml(c.key)}">${escapeHtml(c.label.replace(/^Unparsed:/, 'Couldn’t use:'))} <span aria-hidden="true">×</span></button>`).join('') : `<button type="button" data-screen-template="high-protein">High protein</button><button type="button" data-screen-template="soy-free">Soy-free</button><button type="button" data-screen-template="ready-now">Ready now</button>`;
+  const humanClauses = clauses.filter(clause=>clause.key !== 'unparsed').map(clause => {
+    if (clause.key === 'criterion:protein') return clause.label.replace(/^Protein ≥ ([\d.]+)g$/, '$1g+ protein').replace(/^Protein ≤ ([\d.]+)g$/, 'up to $1g protein');
+    if (clause.key === 'criterion:calories') return clause.label.replace(/^Calories ≤ ([\d.]+)cal$/, 'under $1 cal').replace(/^Calories ≥ ([\d.]+)cal$/, '$1+ cal');
+    if (clause.key === 'query') return clause.label.replace(/^Search: /, '“') + '”';
+    return clause.label.toLowerCase();
+  });
+  const matchContext = humanClauses.length ? `Matches your ${humanClauses.join(' and ')}` : 'Showing all products';
+  const filterSheet = state.filterSheetOpen ? `<div class="filter-sheet-backdrop" data-filter-backdrop><section class="filter-sheet" role="dialog" aria-modal="true" aria-labelledby="filterTitle"><header><span></span><h2 id="filterTitle">Filters</h2><button type="button" data-close-filter aria-label="Close filters">×</button></header><div class="filter-sheet-body"><section class="screen-control-bar"><label><span>Add a filter</span><select id="criterionPicker"><option value="">Choose a filter…</option>${criterionOptions}${facetOptions}</select></label><button class="primary" type="button" data-add-criterion>Add</button><button type="button" data-screen-reset>Clear all</button></section><div class="criterion-stack">${run.screen.criteria.map(criterionEditor).join('')}${run.screen.activeFacets.map(key=>facetEditor(key,run.screen)).join('')}</div><label class="sheet-sort">Sort products<select id="screenSort">${sortOptions}</select></label>${clauses.length ? `<form id="saveScreenForm" class="compact-save-search"><label>Save this search<input name="name" maxlength="40" placeholder="Breakfast picks"></label><button type="submit">Save</button></form>` : ''}</div><footer><button class="primary" type="button" data-close-filter>Show ${run.results.length} products</button></footer></section></div>` : '';
+  app.innerHTML = `<section class="screen screener-screen consumer-search" data-screen="screener">
+    <header class="search-title"><h1 id="screenTitle">Find your protein</h1><p>Search products, brands, or what you need.</p></header>
+    <form class="search-main-form" id="searchAskForm"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="searchAskInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="Try “soy-free snack”">${state.askQuery ? '<button type="button" data-clear-search aria-label="Clear search">×</button>' : '<button type="submit" aria-label="Search">→</button>'}</form>
+    <div class="active-screen personal-chips" aria-label="Search filters">${activeChips}</div>
+    <p class="search-match-context">${escapeHtml(matchContext)}</p>
+    ${state.savedScreens.length ? `<section class="saved-searches"><span>Saved searches</span><div>${savedScreens}</div></section>` : ''}
+    <div class="search-toolbar"><b><span data-screen-result-count>${run.results.length}</span> results</b><button type="button" data-open-filter><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter</button><button type="button" data-open-sort>Sort</button><button type="button" data-compare-mode aria-pressed="${state.compareMode}" aria-label="${state.compareMode ? 'Exit' : 'Enter'} compare mode"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3v18M16 3v18M3 8h5M16 16h5"/></svg></button><button type="button" data-density="${run.screen.density === 'grid' ? 'list' : 'grid'}" aria-label="Switch to ${run.screen.density === 'grid' ? 'list' : 'grid'} view"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button></div>
+    <section class="screen-output" aria-live="polite"><div class="screen-results" data-density="${run.screen.density}">${resultMarkup||`<div class="empty-card screen-empty"><h2>No matches</h2><p>Try removing a filter or searching for something broader.</p><button class="primary" type="button" data-screen-reset>Clear filters</button></div>`}</div>${pageControls}</section>
+    <details class="surface-truth screen-truth"><summary>About these results</summary><p>Product details come from a limited catalog. Price and store availability may be out of date.</p></details>
     ${compareTrayMarkup()}
+    ${filterSheet}
   </section>`;
+  document.querySelector('.app-header').inert = state.filterSheetOpen;
+  document.querySelector('[data-bottom-nav]').inert = state.filterSheetOpen;
 }
 
 function renderSaved() {
@@ -530,48 +545,46 @@ function askPlanMarkup(answer) {
   const plan = answer.queryPlan;
   const filters = Object.entries(plan.filters).map(([field, value]) => `${field}: ${value}`).join(' · ') || 'none';
   const constraints = plan.constraints.join(', ') || 'none';
-  return `<details class="query-plan" data-query-plan><summary>How the agent answered</summary><dl><div><dt>Intent</dt><dd>${escapeHtml(plan.intent)}</dd></div><div><dt>Filters</dt><dd>${escapeHtml(filters)}</dd></div><div><dt>Constraints</dt><dd>${escapeHtml(constraints)}</dd></div><div><dt>Sort</dt><dd>${escapeHtml(plan.sort || 'none')}</dd></div></dl><p>Grounded local catalog rules · no invented products</p></details>`;
+  return `<details class="query-plan" data-query-plan><summary>Why these picks</summary><dl><div><dt>Request</dt><dd>${escapeHtml(plan.intent)}</dd></div><div><dt>Matched</dt><dd>${escapeHtml(filters)}</dd></div><div><dt>Limits</dt><dd>${escapeHtml(constraints)}</dd></div><div><dt>Order</dt><dd>${escapeHtml(plan.sort || 'none')}</dd></div></dl><p>Based only on products currently listed in Protein Finds.</p></details>`;
 }
 
 function askRecommendationMarkup(item) {
   const product = byId(item.productId);
   if (!product) return '';
   const citations = item.citations.map(citation => `<li><code>${escapeHtml(citation.field)}</code>: ${escapeHtml(Array.isArray(citation.value) ? citation.value.join(', ') : citation.value)}</li>`).join('');
-  return `<article class="ask-result" data-ask-product-id="${escapeHtml(product.id)}"><p class="eyebrow">Catalog match</p><h2><a href="#product/${escapeHtml(product.id)}">${escapeHtml(product.name)}</a></h2><p>${escapeHtml(item.reason)}</p><div class="ask-facts"><span><b>${escapeHtml(item.facts.protein)}</b> protein</span><span><b>${escapeHtml(item.facts.calories)}</b> calories</span><span><b>${escapeHtml(item.facts.price)}</b></span><span><b>${escapeHtml(item.facts.store)}</b></span><span><b>${escapeHtml(item.facts.freshness)}</b></span><span><b>${escapeHtml(item.facts.availability)}</b></span></div><details class="field-citations"><summary>Fields used</summary><ul>${citations}</ul></details><div class="ask-actions"><a class="secondary" href="#product/${escapeHtml(product.id)}">View product</a><button class="primary" type="button" data-add="${escapeHtml(product.id)}">${state.basket.includes(product.id) ? 'In basket' : 'Add to basket'}</button></div></article>`;
+  return `<article class="ask-result" data-ask-product-id="${escapeHtml(product.id)}"><p class="eyebrow">Why it fits</p><h2><a href="#product/${escapeHtml(product.id)}">${escapeHtml(product.name)}</a></h2><p>${escapeHtml(item.reason)}</p><div class="ask-facts"><span><b>${escapeHtml(item.facts.protein)}</b> protein</span><span><b>${escapeHtml(item.facts.calories)}</b> calories</span><span><b>${escapeHtml(item.facts.price)}</b></span><span><b>${escapeHtml(item.facts.store)}</b></span><span><b>${escapeHtml(item.facts.freshness)}</b></span><span><b>${escapeHtml(item.facts.availability)}</b></span></div><details class="field-citations"><summary>Product facts used</summary><ul>${citations}</ul></details><div class="ask-actions"><a class="secondary" href="#product/${escapeHtml(product.id)}">View product</a><button class="primary" type="button" data-add="${escapeHtml(product.id)}">${state.basket.includes(product.id) ? 'In basket' : 'Add to basket'}</button></div></article>`;
 }
 
 function renderAsk() {
   const answer = state.askAnswer;
-  const output = answer ? `<section class="ask-answer" aria-live="polite"><div class="ask-summary"><span class="agent-avatar" aria-hidden="true">PF</span><div><b>${escapeHtml(answer.summary)}</b><span>${answer.recommendations.length ? 'These are grounded catalog results; price, location and stock remain labeled seeded or unknown.' : 'Try a supported shopping prompt. Unsupported requests fail closed.'}</span></div></div>${answer.recommendations.map(askRecommendationMarkup).join('') || '<div class="empty-card"><h2>No grounded match</h2><p>No catalog record survived the request. Nothing was invented.</p></div>'}${askPlanMarkup(answer)}</section>` : '<div class="ask-starter"><span class="agent-avatar" aria-hidden="true">PF</span><div><h2>Ask me what to buy</h2><p>I can find cheap breakfast protein, soy-free snacks, protein cereal, or improve the basket already on this device.</p></div></div>';
-  app.innerHTML = `<section class="screen" data-screen="ask">${screenHead('Your grocery agent', 'Ask Protein Finds', 'Ask a normal shopping question and get an immediate catalog-grounded answer.')}<div class="freshness">Demo catalog · no live price or inventory · no health advice</div><form class="ask-form" id="askForm"><label for="askInput">What do you need?</label><div><input id="askInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="e.g. cheap breakfast protein"><button class="primary" type="submit" aria-label="Send question">↑</button></div></form><div class="prompt-row" aria-label="Example questions">${['cheap breakfast protein','soy-free snacks','best protein cereal','improve my basket'].map(prompt => `<button type="button" data-ask-prompt="${prompt}">${prompt}</button>`).join('')}</div>${output}</section>`;
+  const output = answer ? `<section class="ask-answer" aria-live="polite"><div class="ask-summary"><span class="agent-avatar" aria-hidden="true">PF</span><div><b>${escapeHtml(answer.summary)}</b><span>${answer.recommendations.length ? 'Based on our current product list. Check store price and stock before shopping.' : 'Try a simpler shopping request.'}</span></div></div>${answer.recommendations.map(askRecommendationMarkup).join('') || '<div class="empty-card"><h2>No match yet</h2><p>Try fewer details or a broader product name.</p></div>'}${askPlanMarkup(answer)}</section>` : '<div class="ask-starter"><span class="agent-avatar" aria-hidden="true">PF</span><div><h2>Ask me what to buy</h2><p>I can find cheap breakfast protein, soy-free snacks, protein cereal, or improve the basket already on this device.</p></div></div>';
+  app.innerHTML = `<section class="screen" data-screen="ask">${screenHead('Shopping help', 'Ask Protein Finds', 'Describe what you want and get suggestions from products we currently have.')}<div class="freshness">Demo catalog · no live price or inventory · no health advice</div><form class="ask-form" id="askForm"><label for="askInput">What do you need?</label><div><input id="askInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="e.g. cheap breakfast protein"><button class="primary" type="submit" aria-label="Send question">↑</button></div></form><div class="prompt-row" aria-label="Example questions">${['cheap breakfast protein','soy-free snacks','best protein cereal','improve my basket'].map(prompt => `<button type="button" data-ask-prompt="${prompt}">${prompt}</button>`).join('')}</div>${output}</section>`;
 }
 
 function exactSkuMarkup(product) {
   const sku = product.exactSku;
   if (!sku) return '';
-  return `<section class="exact-sku" data-exact-sku>
-    <p class="eyebrow">Exact package identity</p>
+  return `<details class="exact-sku" data-exact-sku><summary>Package details</summary>
     <h2>${escapeHtml(sku.variant)} · ${escapeHtml(sku.size)}</h2>
     <dl><div><dt>UPC</dt><dd>${escapeHtml(sku.upc)}</dd></div><div><dt>Serving</dt><dd>${escapeHtml(sku.servingSize)}</dd></div><div><dt>Package</dt><dd>${escapeHtml(String(sku.servingsPerPackage))} servings</dd></div></dl>
-  </section>`;
+  </details>`;
 }
 
 function productEvidenceMarkup(product) {
   const sku = product.exactSku;
   if (!sku) return '';
-  return `<section class="product-evidence" data-product-evidence>
-    <p class="eyebrow">Evaluate the fit</p>
+  return `<details class="product-evidence" data-product-evidence><summary>Nutrition and ingredients</summary>
     <h2>${product.protein}g protein · ${product.calories} calories · ${product.efficiency}g / 100 cal</h2>
     <div class="evidence-tags">${sku.dietaryLabels.map(label => `<span>${escapeHtml(label)}</span>`).join('')}<span>Contains ${escapeHtml(sku.allergens.join(', '))}</span></div>
     <p><b>Ingredients:</b> ${escapeHtml(product.ingredients)}</p>
-    <p class="evidence-source">Nutrition and ingredients checked ${escapeHtml(sku.nutritionCheckedAt)}. <a href="${escapeHtml(sku.nutritionSourceUrl)}" target="_blank" rel="noopener">Open manufacturer evidence ↗</a></p>
-  </section>`;
+    <p class="evidence-source">Checked ${escapeHtml(sku.nutritionCheckedAt)}. <a href="${escapeHtml(sku.nutritionSourceUrl)}" target="_blank" rel="noopener">View manufacturer page ↗</a></p>
+  </details>`;
 }
 
 function productStoreMarkup(product) {
   const sku = product.exactSku;
   const handoffs = sku?.retailerHandoffs || [];
-  if (!handoffs.length) return `<section class="product-store-panel"><p>No exact retailer handoff or official retailer search is attached.</p></section>`;
+  if (!handoffs.length) return `<section class="product-store-panel"><h2>Where to find it</h2><p>We don't have a store link for this product yet.</p></section>`;
   const origin = state.location || locationData.ZIP_CENTERS['94404'];
   const stores = locationData.storesNear(origin);
   return handoffs.map(handoff => {
@@ -580,8 +593,8 @@ function productStoreMarkup(product) {
     const key = store ? `${product.id}:${store.id}` : null;
     const report = key ? state.sightings[key] : null;
     return `<section class="product-store-panel" ${store ? `data-product-store="${escapeHtml(store.id)}"` : ''} data-retailer-connection="${escapeHtml(handoff.type)}">
-      <div class="product-store-head"><div><p class="eyebrow">${isExact ? 'Exact retailer/order handoff' : 'Official retailer search fallback'}</p><h2>${escapeHtml(store ? `${store.name} · ${store.distanceMiles.toFixed(1)} mi from ${state.location?.label || '94404'}` : handoff.retailer)}</h2>${store ? `<p>${escapeHtml(store.address)}</p>` : ''}</div><span data-availability="unknown">Unknown inventory</span></div>
-      <p class="store-observation"><b>Price unknown · inventory confidence unknown.</b><br>${escapeHtml(isExact ? handoff.detail : 'No exact Target product page or local stock observation is attached. Search uses the exact UPC.')} Checked ${escapeHtml(handoff.checkedAt)}.</p>
+      <div class="product-store-head"><div><p class="eyebrow">Where to find it</p><h2>${escapeHtml(store ? `${store.name} · ${store.distanceMiles.toFixed(1)} mi away` : handoff.retailer)}</h2>${store ? `<p>${escapeHtml(store.address)}</p>` : ''}</div><span data-availability="unknown">Check stock</span></div>
+      <p class="store-observation">Price and stock may have changed. Last checked ${escapeHtml(handoff.checkedAt)}.</p>
       <div class="product-store-actions">${store ? `<a class="secondary" data-directions href="${escapeHtml(store.directionsUrl)}" target="_blank" rel="noopener">Directions ↗</a>` : ''}<a class="primary" data-retailer-handoff="${escapeHtml(handoff.type)}" href="${escapeHtml(handoff.url)}" target="_blank" rel="noopener">${escapeHtml(handoff.label)} ↗</a></div>
       ${store ? `<div class="sighting-box"><button class="secondary" type="button" data-report-sighting="${escapeHtml(key)}" aria-pressed="${Boolean(report)}">${report ? '✓ Report saved' : 'I found this here'}</button><p data-sighting-status>${report ? 'Pending report stored only on this device. It is unverified and does not confirm inventory.' : 'Your report will stay only on this device as pending-local. It will not confirm inventory.'}</p></div>` : ''}
     </section>`;
@@ -601,15 +614,15 @@ function renderProduct(id) {
     <article class="detail-card">
       <div class="detail-image">${imageMarkup(product, true)}</div>
       <div class="detail-body">
-        <p class="detail-verdict"><b>${productVerdict(product)}</b><span>Why it ranks: ${rankingReason(product)}</span></p><h1 id="screenTitle">${product.name}</h1><p class="brand-line">${product.brand} · ${product.category} · ${product.base}</p>
+        <p class="detail-verdict"><b>${productVerdict(product)}</b></p><h1 id="screenTitle">${product.name}</h1><p class="brand-line">${product.brand} · ${product.category}</p>
         ${exactSkuMarkup(product)}
         <div class="detail-metrics"><div><b>${product.protein}g</b><span>protein</span></div><div><b>${product.calories}</b><span>calories</span></div><div><b>${product.efficiency}</b><span>g / 100 cal</span></div></div>
         ${product.exactSku ? `<div class="detail-decision"><span><b>Price unknown</b><small>No store price observation attached</small></span><span><b>${escapeHtml(product.exactSku.retailerHandoffs?.find(handoff => handoff.type === 'exact-product')?.retailer || product.exactSku.retailerHandoffs?.[0]?.retailer || 'Store unknown')}</b><small>Unknown inventory · checked ${escapeHtml(product.exactSku.retailerHandoffs?.find(handoff => handoff.type === 'exact-product')?.checkedAt || product.exactSku.nutritionCheckedAt)}</small></span></div>` : `<div class="detail-decision"><span><b>${priceLabel(product)}</b><small>not a live price</small></span><span><b>${product.stores[0] || 'Store unknown'}</b><small>${product.availabilityLabel} · checked Aug 13</small></span></div>`}
-        <p>${product.blurb}</p><p><b>Best use:</b> ${product.use}</p><p><b>Trade-off:</b> ${product.tradeoff}</p>
+        <p class="detail-blurb">${product.blurb}</p><div class="detail-notes"><p><b>Best for</b><span>${product.use}</span></p><p><b>Keep in mind</b><span>${product.tradeoff}</span></p></div>
         ${productEvidenceMarkup(product)}
-        <div class="truth-note"><b>${product.exactSku ? 'Exact identity; bounded evidence.' : 'Seeded demo record.'}</b> ${product.exactSku ? 'The package identity and attached sources are exact. Current store price and inventory remain unknown.' : 'Nutrition, price and availability are not a current exact-SKU claim. Verify the linked current source before buying.'}</div>
+        <div class="truth-note"><b>${product.exactSku ? 'Verified package.' : 'Sample product info.'}</b> ${product.exactSku ? 'The package matches the listed UPC. Check the store for current price and stock.' : 'Nutrition, price, and availability may have changed.'}</div>
         ${productStoreMarkup(product)}
-        <div class="detail-actions"><button class="primary detail-primary-action" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added to basket' : 'Add to basket'}</button><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save product'}</button><button class="secondary" type="button" data-compare="${product.id}" aria-pressed="${state.compare.has(product.id)}">${state.compare.has(product.id) ? '✓ Comparing' : 'Compare'}</button><a class="secondary" href="#basket">View basket</a><a class="source-link" target="_blank" rel="noopener" href="${product.source}">Verify current source ↗</a></div>
+        <div class="detail-actions"><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? '♥ Saved' : '♡ Save'}</button><button class="secondary" type="button" data-compare="${product.id}" aria-pressed="${state.compare.has(product.id)}">${state.compare.has(product.id) ? '✓ Compare' : 'Compare'}</button><button class="primary detail-primary-action" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added' : 'Add to basket'}</button></div><a class="source-link" target="_blank" rel="noopener" href="${product.source}">View product source ↗</a>
         ${imageCredit}
       </div>
     </article>
@@ -633,7 +646,7 @@ function comparisonDecision(items, sort = 'recommended') {
   const sortedWinner = sortDefinition ? [...items].filter(product => sortDefinition.key === 'name' || Number.isFinite(productScreener.getMetric(product, sortDefinition.key))).sort((a,b) => sortDefinition.key === 'name' ? String(a.name).localeCompare(String(b.name)) : (sortDefinition.direction === 'desc' ? productScreener.getMetric(b,sortDefinition.key)-productScreener.getMetric(a,sortDefinition.key) : productScreener.getMetric(a,sortDefinition.key)-productScreener.getMetric(b,sortDefinition.key)))[0] : null;
   const criterionLabels = {
     protein: 'Most protein screen', calories: 'Fewest calories screen', efficiency: 'Protein-per-calorie screen',
-    price: 'Lowest seeded cost screen', name: 'Product-name screen'
+    price: 'Lowest recorded cost', name: 'Product name'
   };
   const proof = {
     protein: product => `${numberLabel(product.protein, 'g')} protein is the highest known value shown.`,
@@ -647,8 +660,8 @@ function comparisonDecision(items, sort = 'recommended') {
   const wins = winsFor(product);
   const evidence = wins.map(metric => metric.label);
   const explanation = activeCriterion
-    ? `${activeCriterion.proof(product)} It wins ${wins.length} of ${metricDefinitions.length} visible metrics overall.`
-    : `${textLabel(product.name)} wins ${wins.length} of ${metricDefinitions.length} visible metrics${evidence.length ? `: ${evidence.join(', ')}` : '.'}`;
+    ? `${activeCriterion.proof(product)} It leads on ${wins.length} of ${metricDefinitions.length} measurements shown.`
+    : `${textLabel(product.name)} leads on ${wins.length} of ${metricDefinitions.length} measurements${evidence.length ? `: ${evidence.join(', ')}` : '.'}`;
   return { product, label: activeCriterion?.label || 'Visible-metric winner', explanation, evidence, metrics: metricDefinitions };
 }
 
@@ -674,7 +687,7 @@ function renderCompare() {
   const decision = comparisonDecision(items, compareContext.sort);
   const recommended = decision.product;
   const matrixRow = (label, value, winner) => `<div class="compare-matrix-row"><b>${label}</b>${items.map(product => `<span ${winner(product) ? 'data-winner="true"' : ''}>${value(product)}${winner(product) ? '<i>Best</i>' : ''}</span>`).join('')}</div>`;
-  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="${backHref}">← ${backLabel}</a>${screenHead('Side-by-side decision', 'Pick the basket winner', compareContext.origin === 'screener' ? 'Recommendation follows your active Screener ranking; exact product detail follows.' : 'A phone-sized decision summary first; exact product detail follows without a hidden sideways gesture.')}<aside class="compare-recommendation" data-recommendation-id="${escapeHtml(recommended.id)}" data-recommendation-goal="${escapeHtml(compareContext.sort)}"><span>${escapeHtml(decision.label)}</span><h2>${escapeHtml(textLabel(recommended.name))}</h2><p>${escapeHtml(decision.explanation)}</p><div class="recommendation-evidence" aria-label="Visible metric wins">${decision.evidence.map(metric => `<b>Best ${escapeHtml(metric)}</b>`).join('')}</div><a class="primary" href="#product/${escapeHtml(recommended.id)}">Review recommendation</a></aside><div class="compare-matrix" style="--compare-count:${items.length}"><div class="compare-matrix-head"><b>Metric</b>${items.map(product => `<a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a>`).join('')}</div>${matrixRow('Protein', product => numberLabel(product.protein, 'g'), product => highestProtein !== null && product.protein === highestProtein)}${matrixRow('Calories', product => numberLabel(product.calories), product => lowestCalories !== null && product.calories === lowestCalories)}${matrixRow('Value / 25g', product => hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', product => lowestValue !== null && product.pricePer25 === lowestValue)}${matrixRow('Efficiency', product => numberLabel(product.efficiency), product => highestEfficiency !== null && product.efficiency === highestEfficiency)}</div><div class="compare-pick-list">${items.map(product => `<article class="compare-pick" data-compare-product="${escapeHtml(product.id)}"><button type="button" data-compare="${escapeHtml(product.id)}" aria-label="Remove ${escapeHtml(textLabel(product.name))} from comparison">×</button><a class="compare-thumb" href="#product/${escapeHtml(product.id)}" aria-label="Open ${escapeHtml(textLabel(product.name))} details">${imageMarkup(product)}</a><div class="compare-pick-copy"><p class="eyebrow">${escapeHtml(productVerdict(product))}</p><h2><a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a></h2><p>${escapeHtml(textLabel(product.brand))} · ${escapeHtml(product.stores?.[0] || 'Store unknown')}</p><dl><div><dt>Best use</dt><dd>${escapeHtml(textLabel(product.use))}</dd></div><div><dt>Trade-off</dt><dd>${escapeHtml(textLabel(product.tradeoff))}</dd></div></dl><button class="primary" type="button" data-add="${escapeHtml(product.id)}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></div></article>`).join('')}</div><aside class="compare-footnote">Best labels compare only these selected seeded records. Price and inventory are not live.</aside></section>`;
+  app.innerHTML = `<section class="screen compare-screen" data-screen="compare"><a class="detail-back" href="${backHref}">← ${backLabel}</a>${screenHead('Side-by-side decision', 'Pick the basket winner', compareContext.origin === 'screener' ? 'Recommendation follows your current Search sort.' : 'Compare the essentials, then open any product for details.')}<aside class="compare-recommendation" data-recommendation-id="${escapeHtml(recommended.id)}" data-recommendation-goal="${escapeHtml(compareContext.sort)}"><span>${escapeHtml(decision.label)}</span><h2>${escapeHtml(textLabel(recommended.name))}</h2><p>${escapeHtml(decision.explanation)}</p><div class="recommendation-evidence" aria-label="Visible metric wins">${decision.evidence.map(metric => `<b>Best ${escapeHtml(metric)}</b>`).join('')}</div><a class="primary" href="#product/${escapeHtml(recommended.id)}">Review recommendation</a></aside><div class="compare-matrix" style="--compare-count:${items.length}"><div class="compare-matrix-head"><b>Metric</b>${items.map(product => `<a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a>`).join('')}</div>${matrixRow('Protein', product => numberLabel(product.protein, 'g'), product => highestProtein !== null && product.protein === highestProtein)}${matrixRow('Calories', product => numberLabel(product.calories), product => lowestCalories !== null && product.calories === lowestCalories)}${matrixRow('Value / 25g', product => hasKnownPrice(product) ? money(product.pricePer25) : 'Unknown', product => lowestValue !== null && product.pricePer25 === lowestValue)}${matrixRow('Efficiency', product => numberLabel(product.efficiency), product => highestEfficiency !== null && product.efficiency === highestEfficiency)}</div><div class="compare-pick-list">${items.map(product => `<article class="compare-pick" data-compare-product="${escapeHtml(product.id)}"><button type="button" data-compare="${escapeHtml(product.id)}" aria-label="Remove ${escapeHtml(textLabel(product.name))} from comparison">×</button><a class="compare-thumb" href="#product/${escapeHtml(product.id)}" aria-label="Open ${escapeHtml(textLabel(product.name))} details">${imageMarkup(product)}</a><div class="compare-pick-copy"><p class="eyebrow">${escapeHtml(productVerdict(product))}</p><h2><a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a></h2><p>${escapeHtml(textLabel(product.brand))} · ${escapeHtml(product.stores?.[0] || 'Store unknown')}</p><dl><div><dt>Best use</dt><dd>${escapeHtml(textLabel(product.use))}</dd></div><div><dt>Trade-off</dt><dd>${escapeHtml(textLabel(product.tradeoff))}</dd></div></dl><button class="primary" type="button" data-add="${escapeHtml(product.id)}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'In basket' : 'Choose this'}</button></div></article>`).join('')}</div><aside class="compare-footnote">Best labels compare only the products shown. Check store price and stock before shopping.</aside></section>`;
 }
 
 function renderBasket() {
@@ -694,10 +707,10 @@ function renderBasket() {
   const prompts = `<aside class="missing-categories" data-missing-categories><b>${missing.length ? 'Round out the trip' : 'Core trip categories covered'}</b><p>Trip ideas, not nutrition requirements. ${missing.length ? `You may still want ${missing.map(group => group.label).join(', ')}.` : 'This demo basket includes a main, breakfast, dairy or drink, and snack.'}</p></aside>`;
   const storeGroups = Object.entries(groups).map(([store, storeItems]) => {
     const categories = storeItems.reduce((result, product) => { (result[product.category] ||= []).push(product); return result; }, {});
-    return `<section class="basket-store"><h2>${store}</h2>${Object.entries(categories).map(([category, categoryItems]) => `<div class="basket-category"><h3>${category}</h3>${categoryItems.map(product => `<div class="basket-line"><div><a href="#product/${product.id}"><b>${product.name}</b></a><small>${product.protein}g · ${hasKnownPrice(product) ? `~${money(product.price / product.servings)} seeded / serving` : 'price unknown'}</small></div><button type="button" data-remove="${product.id}" aria-label="Remove ${product.name}">Remove</button></div>`).join('')}</div>`).join('')}</section>`;
+    return `<section class="basket-store"><h2>${store}</h2>${Object.entries(categories).map(([category, categoryItems]) => `<div class="basket-category"><h3>${category}</h3>${categoryItems.map(product => `<div class="basket-line"><div><a href="#product/${product.id}"><b>${product.name}</b></a><small>${product.protein}g · ${hasKnownPrice(product) ? `about ${money(product.price / product.servings)} per serving` : 'price unknown'}</small></div><button type="button" data-remove="${product.id}" aria-label="Remove ${product.name}">Remove</button></div>`).join('')}</div>`).join('')}</section>`;
   }).join('');
   const subtotal = unknownPriceCount ? `${money(totalCost)} known + ${unknownPriceCount} unknown` : money(totalCost);
-  app.innerHTML = `<section class="screen" data-screen="basket">${screenHead('Store-grouped trip', 'Grocery basket', 'Your saved trip, grouped for the store. Prices and inventory still require a current check.')}${items.length ? `<div class="basket-progress"><b>${items.length} products across ${Object.keys(groups).length} ${Object.keys(groups).length === 1 ? 'store' : 'stores'}</b><span>Use this as your store plan; Protein Finds does not submit an order.</span></div>${storeGroups}${prompts}<div class="basket-total"><span>Seeded one-serving subtotal</span><br><b>${totalProtein}g · ${subtotal}</b><p>No order or payment is submitted.</p></div><div class="basket-next"><div><b>Keep building this trip</b><span>Add another category or ask the catalog agent to inspect what is missing.</span></div><a class="primary" href="#discover">Continue shopping</a><a class="secondary" href="#ask">Improve my basket</a></div>` : `<div class="empty-card"><span class="state-icon">▣</span><h2>Your basket is empty</h2><p>Add grocery products from Discover. Your trip stays on this device.</p><a class="primary" href="#discover">Find products</a></div>`}</section>`;
+  app.innerHTML = `<section class="screen" data-screen="basket">${screenHead('Your shopping plan', 'Grocery basket', 'Products grouped by store. Check current prices and stock before you go.')}${items.length ? `<div class="basket-progress"><b>${items.length} products across ${Object.keys(groups).length} ${Object.keys(groups).length === 1 ? 'store' : 'stores'}</b><span>Use this as your store plan; Protein Finds does not submit an order.</span></div>${storeGroups}${prompts}<div class="basket-total"><span>Estimated one-serving total</span><br><b>${totalProtein}g · ${subtotal}</b><p>Unknown prices are kept separate. No order or payment is submitted.</p></div><div class="basket-next"><div><b>Keep building this trip</b><span>Add another category or search for what is missing.</span></div><a class="primary" href="#discover">Continue shopping</a><a class="secondary" href="#screener">Search products</a></div>` : `<div class="empty-card"><span class="state-icon">▣</span><h2>Your basket is empty</h2><p>Add grocery products from Home or Search. Your trip stays on this device.</p><a class="primary" href="#screener">Find products</a></div>`}</section>`;
 }
 
 function render() {
@@ -706,6 +719,9 @@ function render() {
   const sameRoute = previousRoute && routeKey(previousRoute) === routeKey(nextRoute);
   const restoredScroll = sameRoute ? scrollY : (state.scroll[routeKey(nextRoute)] || 0);
   currentRoute = nextRoute;
+  if (currentRoute.name !== 'screener') state.filterSheetOpen = false;
+  document.querySelector('.app-header').inert = false;
+  document.querySelector('[data-bottom-nav]').inert = false;
   const renderedRoute = nextRoute;
   document.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-current', tab.dataset.tab === currentRoute.name ? 'page' : 'false'));
   document.querySelector('[data-header-saved]')?.setAttribute('aria-current', currentRoute.name === 'saved' ? 'page' : 'false');
@@ -781,6 +797,25 @@ document.addEventListener('toggle', event => {
   if (event.target.id === 'screenBuilder') state.screenerBuilderOpen = event.target.open;
 }, true);
 
+document.addEventListener('keydown', event => {
+  const sheet = document.querySelector('.filter-sheet');
+  if (!sheet) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    state.filterSheetOpen = false;
+    renderScreener();
+    requestAnimationFrame(() => filterTrigger?.focus());
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const focusable = [...sheet.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href]')];
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
+
 document.addEventListener('submit', event => {
   if (event.target.id === 'locationForm') {
     event.preventDefault();
@@ -799,7 +834,7 @@ document.addEventListener('submit', event => {
     state.askQuery = String(new FormData(event.target).get('query') || '').trim();
     state.screener = productScreener.compile(state.askQuery, state.screener, groceryProducts);
     state.screenerPage = 1; persist(); syncScreenUrl(); renderScreener();
-    liveRegion.textContent = `${productScreener.clauses(state.screener).length} criteria compiled into the live screen`;
+    liveRegion.textContent = `${productScreener.clauses(state.screener).length} filters applied`;
     requestAnimationFrame(() => document.querySelector('.personal-chips')?.scrollIntoView({block:'nearest'}));
     return;
   }
@@ -860,6 +895,15 @@ document.addEventListener('click', event => {
   }
   const clearCompare = event.target.closest('[data-clear-compare]');
   if (clearCompare) { state.compare.clear(); persist(); render(); showToast('Comparison cleared'); return; }
+  const clearSearch = event.target.closest('[data-clear-search]');
+  if (clearSearch) { state.askQuery = ''; state.screener = productScreener.normalize({}, screenerCategories(), screenerStores()); state.screenerPage = 1; persist(); syncScreenUrl(); renderScreener(); requestAnimationFrame(() => document.querySelector('#searchAskInput')?.focus()); return; }
+  const openFilter = event.target.closest('[data-open-filter],[data-open-sort]');
+  if (openFilter) { filterTrigger = openFilter; state.filterSheetOpen = true; renderScreener(); requestAnimationFrame(() => document.querySelector(openFilter.matches('[data-open-sort]') ? '#screenSort' : '#criterionPicker')?.focus()); return; }
+  const closeFilter = event.target.closest('[data-close-filter]');
+  if (closeFilter) { state.filterSheetOpen = false; renderScreener(); requestAnimationFrame(() => filterTrigger?.focus()); return; }
+  if (event.target.matches('[data-filter-backdrop]')) { state.filterSheetOpen = false; renderScreener(); requestAnimationFrame(() => filterTrigger?.focus()); return; }
+  const compareMode = event.target.closest('[data-compare-mode]');
+  if (compareMode) { state.compareMode = !state.compareMode; if (!state.compareMode) state.compare.clear(); persist(); renderScreener(); return; }
   const screenTemplate = event.target.closest('[data-screen-template]');
   if (screenTemplate) { state.screener = productScreener.applyTemplate(screenTemplate.dataset.screenTemplate, screenerCategories(), screenerStores()); state.screenerPage = 1; persist(); syncScreenUrl(); renderScreener(); liveRegion.textContent = `${screenTemplate.textContent} screen applied`; return; }
   const screenReset = event.target.closest('[data-screen-reset]');
