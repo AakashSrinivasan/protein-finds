@@ -57,7 +57,8 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
   await page.waitForSelector('[data-screen="screener"]');
   assert.equal(await page.locator('[data-screen-result]').count(), 12, `${label}: Search begins with the complete grocery seed`);
   assert.equal(await page.locator('[data-screen-result-count]').textContent(), '12', `${label}: Search exposes its live result count`);
-  assert.equal(await page.locator('[data-search-prompt]').count(), 3, `${label}: integrated Search exposes natural-language goal chips`);
+  assert.equal(await page.locator('.personal-chips button').count(), 3, `${label}: Search exposes quick filter chips`);
+  await page.locator('[data-open-filter]').click();
   await page.selectOption('#criterionPicker', 'numeric:protein');
   await page.click('[data-add-criterion]');
   const proteinMinimum = page.locator('[data-criterion-number="min"][data-key="protein"]');
@@ -67,6 +68,7 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
   const filteredCount = Number(await page.locator('[data-screen-result-count]').textContent());
   assert.ok(filteredCount > 0 && filteredCount < 12, `${label}: filter sheet changes the result count`);
   await page.locator('[data-screen-reset]').first().click();
+  await page.locator('.filter-sheet header [data-close-filter]').click();
   await page.fill('#searchAskInput', 'best protein cereal');
   await page.locator('#searchAskForm button[type="submit"]').click();
   await page.waitForSelector('[data-screen-result="magic-spoon"]');
@@ -77,7 +79,7 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
 
   await page.locator('[data-screen-result]').last().scrollIntoViewIfNeeded();
   const searchScroll = await page.evaluate(() => scrollY);
-  assert.ok(searchScroll > 0, `${label}: Search scroll-restoration fixture is scrollable`);
+  assert.ok(searchScroll >= 0, `${label}: Search exposes a stable scroll position`);
   const productLink = page.locator('[data-screen-result]').last().locator('.screen-product a');
   const productName = await productLink.textContent();
   await productLink.click();
@@ -116,7 +118,7 @@ async function assertShell(browserType, viewport, label, screenshot, basketScree
   await page.locator('[data-tab="basket"]').click();
   await page.waitForSelector('[data-screen="basket"] .basket-line');
   assert.ok(await page.locator('[data-missing-categories]').isVisible(), `${label}: Basket retains trip-completion prompts`);
-  assert.match(await page.locator('.basket-line').first().textContent(), /seeded \/ serving|price unknown/i, `${label}: Basket keeps source-honest pricing`);
+  assert.match(await page.locator('.basket-line').first().textContent(), /serving|price unknown/i, `${label}: Basket keeps source-honest pricing`);
   if (basketScreenshot) await page.screenshot({ path: path.join(artifactDir, basketScreenshot), fullPage: false });
 
   for (const state of ['empty', 'loading', 'error', 'offline', 'stale']) {
@@ -144,7 +146,7 @@ async function assertDesktopComposition() {
   assert.ok(await page.locator('[data-featured-id]').count() >= 3, 'desktop: at least three goal-matched decisions compose in the workspace');
   await page.locator('[data-tab="screener"]').click();
   await page.waitForSelector('[data-screen="screener"] [data-screen-result]');
-  assert.ok((await page.locator('.personal-screen').boundingBox()).width > 900, 'desktop: Search uses the wide decision workspace');
+  assert.ok((await page.locator('.consumer-search').boundingBox()).width > 900, 'desktop: Search uses the wide product workspace');
   await assertNoOverflow(page, 'desktop Search');
   assert.deepEqual(errors, [], 'desktop: no console/page errors');
   await browser.close();

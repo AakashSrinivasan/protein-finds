@@ -90,11 +90,15 @@ async function audit(page, engine, state) {
     await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-screen="screener"]');
-    receipt[`${engine}/empty`] = await audit(page, engine, 'empty');
+    await page.locator('[data-open-filter]').click();
+    receipt[`${engine}/default-filter`] = await audit(page, engine, 'default-filter');
+    await page.locator('.filter-sheet header [data-close-filter]').click();
 
-    await page.locator('[data-search-prompt="best protein cereal"]').click();
+    await page.fill('#searchAskInput', 'best protein cereal');
+    await page.locator('#searchAskForm button[type="submit"]').click();
     await page.waitForSelector('[data-screen-result="magic-spoon"]');
-    receipt[`${engine}/populated`] = await audit(page, engine, 'populated');
+    await page.locator('[data-open-filter]').click();
+    receipt[`${engine}/populated-filter`] = await audit(page, engine, 'populated-filter');
 
     await page.locator('.screen-control-bar [data-screen-reset]').click();
     await page.selectOption('#criterionPicker', 'numeric:protein');

@@ -110,22 +110,24 @@ function extractLegacyRelease(destination) {
     );
     const criticalAssets = await returningPage.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name));
     for (const asset of ['app-shell.css', 'data.js', 'product-screener.js', 'location-data.js', 'ask-protein.js', 'app.js']) {
-      const expectedVersion = asset === 'app-shell.css' ? 18 : ['app.js', 'product-screener.js'].includes(asset) ? 17 : 12;
+      const expectedVersion = asset === 'app-shell.css' ? 19 : asset === 'app.js' ? 20 : asset === 'product-screener.js' ? 17 : 12;
       assert.ok(criticalAssets.some(url => url.includes(`/${asset}?v=${expectedVersion}`)), `${asset} loads through its v${expectedVersion} cache-miss URL`);
     }
 
     await returningPage.locator('[data-tab="screener"]').click();
     await returningPage.waitForSelector('[data-screen="screener"]');
+    await returningPage.click('[data-open-filter]');
     await returningPage.selectOption('#criterionPicker', 'numeric:protein');
     await returningPage.click('[data-add-criterion]');
     await returningPage.fill('[data-criterion-number="min"][data-key="protein"]', '10');
     await returningPage.locator('[data-criterion-number="min"][data-key="protein"]').press('Tab');
+    await returningPage.click('.filter-sheet header [data-close-filter]');
     const beforeNavigation = await returningPage.evaluate(() => {
       scrollTo(0, Math.max(1, document.documentElement.scrollHeight - innerHeight - 80));
       return scrollY;
     });
     assert.ok(beforeNavigation > 0, 'upgrade fixture has a meaningful Screener scroll position');
-    await returningPage.locator('[data-screen-result] .screen-product a').first().click();
+    await returningPage.locator('[data-screen-result] .screen-product a').last().click();
     await returningPage.waitForSelector('[data-screen="product"]');
     const savedScrollState = await returningPage.evaluate(() => JSON.parse(sessionStorage.getItem('protein-finds-scroll-v1') || '{}'));
     const savedScroll = savedScrollState.screener;
@@ -133,6 +135,8 @@ function extractLegacyRelease(destination) {
     await returningPage.goBack();
     await returningPage.waitForSelector('[data-screen="screener"]');
     await returningPage.waitForFunction(expected => Math.abs(scrollY - expected) < 8, savedScroll, { polling: 100 });
+    assert.match(await returningPage.locator('.personal-chips').innerText(), /Protein ≥ 10g/, 'restored Search exposes the active protein filter');
+    await returningPage.click('[data-open-filter]');
     assert.equal(await returningPage.inputValue('[data-criterion-number="min"][data-key="protein"]'), '10', 'Screener state survives the first upgraded visit');
     assert.deepEqual(errors, [], 'returning-client upgrade has zero console or page errors');
 

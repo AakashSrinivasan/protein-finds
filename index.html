@@ -13,15 +13,15 @@
   <link rel="icon" href="icons/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="app-shell.css?v=18">
+  <link rel="stylesheet" href="app-shell.css?v=19">
 </head>
 <body>
   <header class="app-header">
     <a class="brand" href="#discover" aria-label="Protein Finds discover">
       <span class="brand-mark" aria-hidden="true">PF</span>
-      <span><b>Protein Finds</b><small>The vegetarian protein database</small></span>
+      <span><b>Protein Finds</b></span>
     </a>
-    <div class="header-tools"><button id="installButton" class="header-action" type="button" aria-label="Install Protein Finds">Install</button></div>
+    <details class="header-menu"><summary aria-label="More options"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></summary><div><button id="installButton" type="button">Install app</button><a href="#saved">Saved products</a></div></details>
   </header>
 
   <main id="appMain" tabindex="-1"></main>
@@ -29,11 +29,11 @@
   <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 
   <nav class="bottom-nav" data-bottom-nav aria-label="App tabs">
-    <a href="#discover" data-tab="discover"><span aria-hidden="true">⌂</span><b>Home</b></a>
-    <a href="#screener" data-tab="screener"><span aria-hidden="true">⌕</span><b>Search</b></a>
-    <a href="#nearby" data-tab="nearby"><span aria-hidden="true">⌖</span><b>Nearby</b></a>
-    <a href="#saved" data-tab="saved"><span aria-hidden="true">♡</span><b>Saved</b><i id="savedCount">0</i></a>
-    <a href="#basket" data-tab="basket"><span aria-hidden="true">▣</span><b>Basket</b><i id="basketCount">0</i></a>
+    <a href="#discover" data-tab="discover"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5v8a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><b>Home</b></a>
+    <a href="#screener" data-tab="screener"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><b>Search</b></a>
+    <a href="#nearby" data-tab="nearby"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><b>Nearby</b></a>
+    <a href="#saved" data-tab="saved"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg><b>Saved</b><i id="savedCount">0</i></a>
+    <a href="#basket" data-tab="basket"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 8h14l-1 13H6zM9 8a3 3 0 0 1 6 0"/></svg><b>Basket</b><i id="basketCount">0</i></a>
   </nav>
 
   <script src="data.js?v=12"></script>
@@ -41,6 +41,6 @@
   <script src="location-data.js?v=12"></script>
   <script src="ask-protein.js?v=12"></script>
   <script src="vendor/leaflet/leaflet.js"></script>
-  <script src="app.js?v=17"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

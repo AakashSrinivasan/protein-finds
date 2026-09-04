@@ -59,7 +59,8 @@ async function audit(page, label) {
 
     await page.locator('[data-tab="screener"]').click();
     await page.waitForSelector('[data-screen="screener"]');
-    await page.locator('[data-search-prompt="best protein cereal"]').click();
+    await page.fill('#searchAskInput', 'best protein cereal');
+    await page.locator('#searchAskForm button[type="submit"]').click();
     await page.waitForSelector('[data-screen-result="magic-spoon"]');
     await audit(page, `${viewport.name}/search`);
     assert.equal(await page.locator('[data-tab][aria-current="page"]').getAttribute('data-tab'), 'screener');

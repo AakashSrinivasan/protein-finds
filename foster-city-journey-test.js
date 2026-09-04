@@ -46,8 +46,8 @@ async function exerciseJourney(browserType) {
 
   const exactHandoff = page.locator('[data-retailer-connection="exact-product"]');
   assert.match(await exactHandoff.textContent(), /Check Safeway on Instacart/i);
-  assert.match(await exactHandoff.textContent(), /Price unknown/i);
-  assert.match(await exactHandoff.textContent(), /Unknown inventory/i);
+  assert.match(await exactHandoff.textContent(), /Price and stock may have changed/i);
+  assert.match(await exactHandoff.textContent(), /Check stock/i);
   const exactUrl = await exactHandoff.locator('[data-retailer-handoff="exact-product"]').getAttribute('href');
   assert.match(exactUrl, /^https:\/\/www\.instacart\.com\/products\/27918479-/);
 
@@ -56,10 +56,9 @@ async function exerciseJourney(browserType) {
   const nearbyText = await nearby.textContent();
   assert.match(nearbyText, /Target/i);
   assert.match(nearbyText, /2220 Bridgepointe Pkwy/i);
-  assert.match(nearbyText, /mi from 94404/i);
-  assert.match(nearbyText, /unknown/i);
+  assert.match(nearbyText, /mi away/i);
+  assert.match(nearbyText, /Check stock/i);
   assert.match(nearbyText, /Search Target/i);
-  assert.match(nearbyText, /No exact Target product page/i);
   assert.equal(await nearby.locator('[data-retailer-handoff="retailer-search"]').getAttribute('href'), 'https://www.target.com/s?searchTerm=0810057290831');
   assert.match(await nearby.locator('[data-directions]').getAttribute('href'), /^https:\/\/www\.openstreetmap\.org\/directions/);
 
@@ -74,21 +73,24 @@ async function exerciseJourney(browserType) {
   assert.equal(stored.sightings['beyond-steak:target-bridgepointe-san-mateo'].status, 'pending-local');
   assert.equal(Object.keys(stored.sightings).length, 1, 'duplicate product/store reports cannot inflate local counts');
 
-  await page.locator('[data-compare="beyond-steak"]').click();
   await page.locator('[data-tab="screener"]').click();
   await page.waitForSelector('[data-screen="screener"]');
+  await page.locator('[data-compare-mode]').click();
+  await page.locator('[data-screen-result="beyond-steak"] [data-compare]').click();
+  await page.locator('[data-open-filter]').click();
   await page.selectOption('#criterionPicker', 'numeric:protein');
   await page.locator('[data-add-criterion]').click();
   const minimumProtein = page.locator('[data-criterion-number="min"][data-key="protein"]');
   await minimumProtein.fill('10');
   await minimumProtein.press('Tab');
   await page.selectOption('#screenSort', 'protein');
+  const selectedCriteria = await page.evaluate(() => ({
+    minProtein: window.ProteinFinds.state.screener.criteria.find(item => item.key === 'protein').min,
+    sort: window.ProteinFinds.state.screener.sort
+  }));
+  await page.locator('.filter-sheet header [data-close-filter]').click();
   await page.locator('[data-screen-result="quest-cookie"] [data-compare]').click();
   await page.evaluate(() => scrollTo(0, Math.min(1400, document.documentElement.scrollHeight - innerHeight)));
-  const selectedCriteria = await page.evaluate(() => ({
-    minProtein: document.querySelector('[data-criterion-number="min"][data-key="protein"]').value,
-    sort: document.querySelector('#screenSort').value
-  }));
   await page.evaluate(() => document.querySelector('[data-compare-tray] a[href="#compare"]').click());
   await page.waitForSelector('[data-screen="compare"]');
   const savedScreenerScroll = await page.evaluate(() => JSON.parse(sessionStorage.getItem('protein-finds-scroll-v1')).screener);
@@ -97,9 +99,9 @@ async function exerciseJourney(browserType) {
   await page.waitForSelector('[data-screen="screener"]');
   await page.waitForFunction(expected => Math.abs(scrollY - expected) < 8, savedScreenerScroll);
   assert.deepEqual(await page.evaluate(() => ({
-    minProtein: document.querySelector('[data-criterion-number="min"][data-key="protein"]').value,
-    sort: document.querySelector('#screenSort').value
-  })), selectedCriteria, 'Compare/Back restores exact Screener criteria');
+    minProtein: window.ProteinFinds.state.screener.criteria.find(item => item.key === 'protein').min,
+    sort: window.ProteinFinds.state.screener.sort
+  })), selectedCriteria, 'Compare/Back restores exact Search filters');
 
   await page.addScriptTag({ content: axeSource });
   const violations = await page.evaluate(async () => (await axe.run(document, {
