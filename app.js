@@ -26,6 +26,7 @@ const categoryFilters = {
 };
 const storedCategory = stored.category === 'All' ? 'All groceries' : stored.category;
 const screenerCategories = () => [...new Set(groceryProducts.map(product => product.category).filter(category => typeof category === 'string' && category.trim()))].sort((a, b) => a.localeCompare(b));
+const screenerStores = () => [...new Set(groceryProducts.flatMap(product => product.stores || []))].sort((a, b) => a.localeCompare(b));
 const storedCompareContext = stored.compareContext && ['discover', 'screener'].includes(stored.compareContext.origin)
   ? { origin: stored.compareContext.origin, sort: productScreener.SORTS[stored.compareContext.sort] ? stored.compareContext.sort : 'recommended' }
   : { origin: 'discover', sort: 'recommended' };
@@ -51,9 +52,11 @@ const state = {
   selectedStore: null,
   askQuery: '',
   askAnswer: null,
-  screener: productScreener.normalize(stored.screener, screenerCategories()),
+  screener: productScreener.normalize(stored.screener, screenerCategories(), screenerStores()),
   screenerPage: Number.isInteger(stored.screenerPage) && stored.screenerPage > 0 ? stored.screenerPage : 1,
   screenerBuilderOpen: matchMedia('(min-width: 700px) and (min-height: 501px)').matches,
+  savedScreens: Array.isArray(stored.savedScreens) ? stored.savedScreens.filter(item => item && typeof item.name === 'string' && item.screen).slice(0, 12) : [],
+  defaultScreenId: typeof stored.defaultScreenId === 'string' ? stored.defaultScreenId : null,
   compareContext: storedCompareContext,
   sightings: storedSightings
 };
@@ -83,10 +86,28 @@ function persist() {
   localStorage.setItem(storageKey, JSON.stringify({
     saved: [...state.saved], basket: state.basket, search: state.search,
     compare: [...state.compare], category: state.category, sort: state.sort,
-    screener: state.screener, screenerPage: state.screenerPage, compareContext: state.compareContext,
+    screener: state.screener, screenerPage: state.screenerPage, savedScreens: state.savedScreens, defaultScreenId: state.defaultScreenId, compareContext: state.compareContext,
     sightings: state.sightings
   }));
   updateCounts();
+}
+
+function addToBasket(productId, source = 'product') {
+  const id = String(productId || '').trim();
+  const product = byId(id);
+  if (!product) {
+    showToast('That product is unavailable in this catalog.');
+    return false;
+  }
+  if (state.basket.includes(id)) {
+    showToast(`${product.name} is already in your basket`, { href: '#basket', label: 'View basket' });
+    return false;
+  }
+  state.basket = [...state.basket, id];
+  persist();
+  render();
+  showToast(`${product.name} added to basket`, { href: '#basket', label: 'View basket' });
+  return true;
 }
 
 function captureDecisionContext() {
@@ -97,23 +118,23 @@ function captureDecisionContext() {
 function updateCounts() {
   const saved = document.querySelector('#savedCount');
   const basket = document.querySelector('#basketCount');
-  saved.textContent = state.saved.size;
-  saved.dataset.count = state.saved.size;
-  basket.textContent = state.basket.length;
-  basket.dataset.count = state.basket.length;
+  if (saved) { saved.textContent = state.saved.size; saved.dataset.count = state.saved.size; }
+  if (basket) { basket.textContent = state.basket.length; basket.dataset.count = state.basket.length; }
 }
 
 function parseRoute() {
   const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
   if (hash.startsWith('product/')) return { name: 'product', id: hash.slice(8) };
-  return { name: ['discover', 'screener', 'nearby', 'ask', 'saved', 'basket', 'compare'].includes(hash) ? hash : 'discover' };
+  const name = hash.split('?')[0];
+  return { name: ['discover', 'screener', 'nearby', 'ask', 'saved', 'basket', 'compare'].includes(name) ? name : 'discover' };
 }
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 
 function saveScroll() {
-  if (!currentRoute) return;
-  state.scroll[routeKey(currentRoute)] = Math.round(scrollY);
+  const activeRoute = parseRoute();
+  if (!activeRoute) return;
+  state.scroll[routeKey(activeRoute)] = Math.round(scrollY);
   sessionStorage.setItem(scrollKey, JSON.stringify(state.scroll));
 }
 
@@ -347,9 +368,9 @@ function renderNearby() {
 
 function featuredCard(product, index, goal) {
   const label = index === 0 ? `${goal.short} leader` : `#${index + 1} for ${goal.short.toLowerCase()}`;
-  return `<article class="featured-card" data-featured-id="${product.id}">
+  return `<article class="featured-card" data-featured-id="${product.id}" data-product-id="${product.id}">
     <a class="featured-media" href="#product/${product.id}" aria-label="View ${product.name}">${imageMarkup(product)}</a>
-    <div class="featured-copy"><div class="featured-info"><span>${label}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><div class="featured-metrics"><b>${product.protein}g</b><small>protein</small><b>${product.calories}</b><small>cal</small></div><p class="featured-tradeoff"><b>Trade-off:</b> ${product.tradeoff}</p></div><div class="featured-actions"><a class="secondary" href="#product/${product.id}">Details</a><button class="secondary" type="button" data-compare="${product.id}" aria-pressed="${state.compare.has(product.id)}">${state.compare.has(product.id) ? 'Comparing' : 'Compare'}</button><button class="primary" type="button" data-add="${product.id}" aria-label="Add ${product.name} to basket" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added' : 'Add'}</button></div></div>
+    <div class="featured-copy"><div class="featured-info"><span>${label}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><p class="featured-verdict">${productVerdict(product)}</p><div class="featured-metrics"><b>${product.protein}g</b><small>protein</small><b>${product.calories}</b><small>cal</small><b>${hasKnownPrice(product) ? money(product.pricePer25) : '—'}</b><small>value</small></div></div><div class="featured-actions"><a class="primary" href="#product/${product.id}">View find</a></div></div>
   </article>`;
 }
 
@@ -362,28 +383,20 @@ function compareTrayMarkup() {
 function renderDiscover() {
   const list = filteredProducts();
   const goal = goalDefinitions[state.sort] || goalDefinitions.recommended;
-  const featured = list.slice(0, 3);
-  const leader = list[0];
-  const categories = Object.keys(categoryFilters);
-  const forcedState = state.dataState;
-  let content;
-  if (['loading', 'error'].includes(forcedState)) content = stateMarkup(forcedState);
-  else if (forcedState === 'empty' || !list.length) content = stateMarkup('empty');
-  else content = `${['offline', 'stale'].includes(forcedState) ? stateMarkup(forcedState) : ''}<p class="results-meta">${list.length} grocery options</p><div class="product-list">${list.map(productCard).join('')}</div>`;
+  const featured = list.slice(0, 5);
+  const exactCount = groceryProducts.filter(product => product.exactSku).length;
+  const blockingState = ['loading', 'error', 'empty'].includes(state.dataState);
+  const visibleState = ['loading', 'error', 'empty', 'offline', 'stale'].includes(state.dataState) ? stateMarkup(state.dataState) : '';
   app.innerHTML = `<section class="screen discover-screen" data-screen="discover">
-    <section class="discover-hero"><div class="hero-orbit" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">Vegetarian protein, decoded</p><h1 id="screenTitle">Build a better <br><em>grocery run.</em></h1><p>Choose what matters, compare the strongest options, and build the trip.</p><div class="hero-actions" aria-label="Shopping goal">${[['protein','Most protein'],['efficiency','Leanest picks'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>${leader ? `<div class="hero-leader" aria-live="polite"><span>${goal.title}</span><b>${leader.name}</b><small>${leader.protein}g protein · ${leader.calories} cal · ${hasKnownPrice(leader) ? `${money(leader.pricePer25)} value / 25g` : 'price unknown'}</small></div>` : ''}</section>
-    ${featured.length ? `<section class="featured-section"><div class="section-title"><div><p class="eyebrow">Goal-matched shortlist</p><h2>${goal.title}</h2><small>${goal.reason}</small></div><span>Swipe →</span></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : ''}
-    <details class="surface-truth"><summary>About these results</summary><p>Demo catalog recorded Aug 13, 2026. Prices and inventory are not live; exact package photos appear only when the variant and rights are known.</p></details>
-    <div class="discovery-tools">
-      <label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" value="${state.search.replaceAll('"', '&quot;')}" aria-label="Search products" placeholder="Search products"></label>
-      <select id="sort" aria-label="Sort products"><option value="recommended">Best fit</option><option value="protein">Protein</option><option value="efficiency">Efficiency</option><option value="price">Seed price</option></select>
-    </div>
-    <div class="category-row" aria-label="Product categories">${categories.map(category => `<button type="button" data-category="${category}" aria-pressed="${state.category === category}">${category}</button>`).join('')}</div>
-    <div class="section-title catalog-title"><div><p class="eyebrow">The full shelf</p><h2>Compare every find</h2></div></div>
-    <div id="catalogState">${content}</div>
-    ${compareTrayMarkup()}
+    <header class="home-intro"><p class="eyebrow">Your vegetarian protein field guide</p><h1 id="screenTitle">Find the protein<br><em>worth buying.</em></h1><p>Fast answers from exact products, clear trade-offs, and nearby store paths.</p></header>
+    <a class="home-search" href="#screener"><span aria-hidden="true">⌕</span><b>What protein are you looking for?</b><i aria-hidden="true">→</i></a>
+    <a class="home-location" href="#nearby"><span aria-hidden="true">⌖</span><div><small>Shopping near</small><b>Foster City · 94404</b></div><i>${locationData.STORES.length} stores →</i></a>
+    <div class="hero-actions home-goals" aria-label="Shopping goal">${[['protein','Most protein'],['efficiency','Leanest'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>
+    ${visibleState}
+    ${!blockingState && featured.length ? `<section class="featured-section home-recommendations"><div class="section-title"><div><p class="eyebrow">Picked for your goal</p><h2>${goal.title}</h2><small>${goal.reason}</small></div><span>Swipe →</span></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : (!visibleState ? stateMarkup('empty') : '')}
+    <section class="home-utility-grid" aria-label="Explore Protein Finds"><a href="#nearby"><span>⌖</span><small>Nearby now</small><b>Browse ${locationData.STORES.length} Foster City stores</b><i>Open map →</i></a><a href="#screener"><span>✦</span><small>Search the shelf</small><b>${groceryProducts.length} products · ${exactCount} exact packages</b><i>Filter finds →</i></a></section>
+    <details class="surface-truth"><summary>Data freshness and coverage</summary><p>This is a bounded alpha catalog, not a comprehensive market view. Prices and inventory are not live; exact package photos appear only when identity and rights are known.</p></details>
   </section>`;
-  document.querySelector('#sort').value = state.sort;
 }
 
 function screenerResultMarkup(product, rank) {
@@ -398,7 +411,7 @@ function screenerResultMarkup(product, rank) {
   </article>`;
 }
 
-function renderScreener() {
+function renderLegacyScreener() {
   const run = productScreener.run(groceryProducts, state.screener);
   state.screener = run.screen;
   const pagination = productScreener.paginate(run.results, state.screenerPage, 24);
@@ -415,7 +428,10 @@ function renderScreener() {
     : `<div class="empty-card screen-empty"><span class="state-icon">∅</span><h2>No products match all of that</h2><p>Remove one criterion to widen the screen. Protein Finds will not invent a match.</p><button class="primary" type="button" data-screen-reset>Clear screen</button></div>`;
 
   app.innerHTML = `<section class="screen screener-screen" data-screen="screener">
-    ${screenHead('Universal product screener', 'Find exactly what fits', 'Choose normal food preferences. Results update from the catalog—no formulas, mystery score, or invented products.')}
+    ${screenHead('Search the shelf', 'What are you looking for?', 'Ask naturally or use precise filters. Every answer stays grounded in the current catalog.')}
+    <form class="ask-form search-ask-form" id="searchAskForm"><label for="searchAskInput">Describe what you want</label><div><input id="searchAskInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="High-protein soy-free snack"><button class="primary" type="submit" aria-label="Search with natural language">↑</button></div></form>
+    <div class="prompt-row search-prompts" aria-label="Quick natural-language searches">${['cheap breakfast protein','soy-free snacks','best protein cereal'].map(prompt => `<button type="button" data-search-prompt="${prompt}">${prompt}</button>`).join('')}</div>
+    ${state.askAnswer ? `<section class="search-answer" aria-live="polite"><div class="ask-summary"><span class="agent-avatar" aria-hidden="true">PF</span><div><b>${escapeHtml(state.askAnswer.summary)}</b><span>Catalog-grounded results; stock and price remain labeled unknown or seeded.</span></div></div>${state.askAnswer.recommendations.slice(0, 2).map(askRecommendationMarkup).join('')}</section>` : ''}
     <div class="screener-presets" aria-label="Quick screens"><button type="button" data-screen-template="high-protein">20g+ under 200 cal</button><button type="button" data-screen-template="soy-free">Soy-free standouts</button><button type="button" data-screen-template="ready-now">Ready-now 10g+</button></div>
     <div class="screener-workspace">
       <details class="screen-builder" id="screenBuilder" ${state.screenerBuilderOpen ? 'open' : ''}>
@@ -435,6 +451,72 @@ function renderScreener() {
       </section>
     </div>
     <details class="surface-truth screen-truth"><summary>Coverage and data policy</summary><p>This proves the screening workflow against ${run.total} grocery records—not a comprehensive market database. Every result is an existing catalog record. Prices are seeded, inventory is not live, and unsupported fields are not offered as filters.</p></details>
+    ${compareTrayMarkup()}
+  </section>`;
+}
+
+function criterionEditor(item) {
+  const definition = productScreener.CRITERIA[item.key];
+  const range = productScreener.bounds(groceryProducts, item.key);
+  if (!range) return '';
+  const minValue = item.min ?? range.min;
+  const maxValue = item.max ?? range.max;
+  return `<article class="criterion-card" data-criterion="${item.key}">
+    <header><div><span>${escapeHtml(definition.label)}</span><small>Catalog range ${range.min}–${range.max} ${escapeHtml(definition.unit)} · ${range.known}/${groceryProducts.length} known</small></div><button type="button" data-remove-criterion="${item.key}" aria-label="Remove ${escapeHtml(definition.label)}">×</button></header>
+    <div class="criterion-exact"><label>Minimum <span><input type="number" inputmode="decimal" data-criterion-number="min" data-key="${item.key}" min="${range.min}" max="${range.max}" step="${range.step}" value="${item.min ?? ''}" placeholder="Any"><b>${escapeHtml(definition.unit)}</b></span></label><label>Maximum <span><input type="number" inputmode="decimal" data-criterion-number="max" data-key="${item.key}" min="${range.min}" max="${range.max}" step="${range.step}" value="${item.max ?? ''}" placeholder="Any"><b>${escapeHtml(definition.unit)}</b></span></label></div>
+    <div class="dual-range" data-range-key="${item.key}"><div class="range-track"></div><input type="range" data-criterion-range="min" data-key="${item.key}" min="${range.min}" max="${range.max}" step="${range.step}" value="${minValue}" aria-label="Minimum ${escapeHtml(definition.label)}"><input type="range" data-criterion-range="max" data-key="${item.key}" min="${range.min}" max="${range.max}" step="${range.step}" value="${maxValue}" aria-label="Maximum ${escapeHtml(definition.label)}"></div>
+    <label class="unknown-toggle"><input type="checkbox" data-criterion-unknown="${item.key}" ${item.includeUnknown ? 'checked' : ''}><span>Include products where ${escapeHtml(definition.label.toLowerCase())} is unknown</span></label>
+  </article>`;
+}
+
+function facetEditor(key, screen) {
+  const remove = `<button type="button" class="facet-remove" data-remove-facet="${key}" aria-label="Remove criterion">×</button>`;
+  if (key === 'diet') return `<article class="facet-card" data-facet="diet"><header><b>Diet</b>${remove}</header><select data-facet-select="diet"><option value="all">Any vegetarian fit</option><option value="vegetarian" ${screen.diet==='vegetarian'?'selected':''}>Vegetarian</option><option value="vegan" ${screen.diet==='vegan'?'selected':''}>Vegan only</option></select></article>`;
+  if (key === 'categories' || key === 'stores' || key === 'prep') {
+    const values = key === 'categories' ? screenerCategories() : key === 'stores' ? screenerStores() : ['Ready now','Heat','Cook'];
+    const selected = screen[key];
+    return `<article class="facet-card" data-facet="${key}"><header><b>${key === 'categories' ? 'Product type' : key === 'stores' ? 'Store' : 'Preparation'}</b>${remove}</header><div class="facet-options">${values.map(value=>`<label><input type="checkbox" data-facet-check="${key}" value="${escapeHtml(value)}" ${selected.includes(value)?'checked':''}><span>${escapeHtml(value)}</span></label>`).join('')}</div></article>`;
+  }
+  if (key === 'ingredients') return `<article class="facet-card" data-facet="ingredients"><header><b>Ingredients</b>${remove}</header><div class="text-criteria"><label>Must include<input data-facet-text="ingredientInclude" value="${escapeHtml(screen.ingredientInclude)}" placeholder="e.g. fava"></label><label>Must exclude<input data-facet-text="ingredientExclude" value="${escapeHtml(screen.ingredientExclude)}" placeholder="e.g. stevia"></label></div><small>Ingredient text is source-bound; unknown panels fail closed.</small></article>`;
+  return `<article class="facet-card" data-facet="allergens"><header><b>User-defined allergens</b>${remove}</header><label>Avoid (comma-separated)<input data-facet-text="allergens" value="${escapeHtml(screen.allergens.join(', '))}" placeholder="e.g. sesame, peanut"></label><small>Products without sufficient allergen evidence are excluded.</small></article>`;
+}
+
+function syncScreenUrl() {
+  const encoded = productScreener.encode(state.screener);
+  history.replaceState(null, '', `${location.pathname}${location.search}#screener?screen=${encoded}`);
+}
+
+function renderScreener() {
+  const routeHash = decodeURIComponent(location.hash.slice(1));
+  const encoded = routeHash.match(/^screener\?screen=([^&]+)/)?.[1];
+  if (encoded) {
+    const decoded = productScreener.decode(encoded);
+    if (decoded) state.screener = productScreener.normalize(decoded, screenerCategories(), screenerStores());
+  }
+  const run = productScreener.run(groceryProducts, state.screener);
+  state.screener = run.screen;
+  const clauses = productScreener.clauses(run.screen);
+  const activeKeys = new Set(run.screen.criteria.map(item=>item.key));
+  const criterionOptions = Object.entries(productScreener.CRITERIA).filter(([key])=>!activeKeys.has(key)&&productScreener.bounds(groceryProducts,key)).map(([key,d])=>`<option value="numeric:${key}">${escapeHtml(d.label)}</option>`).join('');
+  const facetLabels = {diet:'Diet',categories:'Product type',stores:'Store',prep:'Preparation',ingredients:'Ingredients',allergens:'User-defined allergens'};
+  const facetOptions = Object.entries(facetLabels).filter(([key])=>!run.screen.activeFacets.includes(key)).map(([key,label])=>`<option value="facet:${key}">${label}</option>`).join('');
+  const sortOptions = Object.entries(productScreener.SORTS).map(([key,d])=>`<option value="${key}" ${run.screen.sort===key?'selected':''}>${escapeHtml(d.label)}</option>`).join('');
+  const savedScreens = state.savedScreens.length ? state.savedScreens.map(item=>`<button type="button" data-load-screen="${item.id}">${escapeHtml(item.name)}${state.defaultScreenId===item.id?' · default':''}</button>`).join('') : '<span>No saved screens yet</span>';
+  const resultMarkup = run.results.map((product,index)=>{
+    const evaluation=run.evaluations.get(product.id); const base=screenerResultMarkup(product,index+1);
+    return base.replace('</article>',`<p class="match-reason"><b>Why it matched:</b> ${escapeHtml(evaluation.reasons.slice(0,4).join(' · ')||'No restrictive criterion is active')}</p></article>`);
+  }).join('');
+  app.innerHTML = `<section class="screen screener-screen personal-screen" data-screen="screener">
+    ${screenHead('Personal protein screen', 'Build the shelf around you.', 'Choose only the evidence-backed criteria that matter. Every result explains itself.')}
+    <form class="ask-form search-ask-form" id="searchAskForm"><label for="searchAskInput">Describe your exact screen</label><div><input id="searchAskInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="At least 18g protein, under 220 calories, soy-free"><button class="primary" type="submit">Compile</button></div></form>
+    <div class="prompt-row search-prompts">${['best protein cereal','vegan ready-now at Target','20g protein under 200 calories'].map(prompt=>`<button type="button" data-search-prompt="${prompt}">${prompt}</button>`).join('')}</div>
+    <div class="screen-presets" aria-label="Example screens"><button type="button" data-screen-template="high-protein">High protein</button><button type="button" data-screen-template="soy-free">Soy-free</button><button type="button" data-screen-template="ready-now">Ready now</button></div>
+    <section class="screen-control-bar"><label><span>Add a criterion</span><select id="criterionPicker"><option value="">Choose what matters…</option>${criterionOptions}${facetOptions}</select></label><button class="primary" type="button" data-add-criterion>Add criterion</button><button type="button" data-screen-reset>Reset</button></section>
+    <div class="active-screen personal-chips" aria-label="Active criteria">${clauses.length?clauses.map(c=>`<button type="button" data-remove-screen-clause="${escapeHtml(c.key)}">${escapeHtml(c.label)} <span>×</span></button>`).join(''):`<span class="screen-no-criteria">No criteria yet · all ${run.total} catalog products remain</span>`}</div>
+    <div class="criterion-stack">${run.screen.criteria.map(criterionEditor).join('')}${run.screen.activeFacets.map(key=>facetEditor(key,run.screen)).join('')}</div>
+    <section class="saved-screen-tools"><form id="saveScreenForm"><label>Name this screen<input name="name" maxlength="40" placeholder="My weekday breakfast"></label><button class="secondary" type="submit">Save screen</button></form><div class="saved-screen-list">${savedScreens}</div></section>
+    <section class="screen-output" aria-live="polite"><div class="screen-output-head"><div><p class="eyebrow">Live evidence-backed matches</p><h2><b data-screen-result-count>${run.results.length}</b> of ${run.total}</h2><small>${run.excludedUnknownCount} excluded because an active field was unknown</small></div><div class="output-controls"><label>Sort<select id="screenSort">${sortOptions}</select></label><div><button type="button" data-density="list" aria-pressed="${run.screen.density==='list'}">List</button><button type="button" data-density="grid" aria-pressed="${run.screen.density==='grid'}">Grid</button></div></div></div><div class="screen-results" data-density="${run.screen.density}">${resultMarkup||`<div class="empty-card screen-empty"><h2>No evidenced match</h2><p>Widen a range or explicitly include unknowns. The engine will not fabricate a fit.</p></div>`}</div></section>
+    <details class="surface-truth screen-truth"><summary>Evidence and unknown policy</summary><p>Numeric criteria are offered only for fields present in this catalog. Unknown values are excluded by default under active constraints; each criterion can explicitly include them. Prices and availability remain seeded or unknown—not live.</p></details>
     ${compareTrayMarkup()}
   </section>`;
 }
@@ -546,9 +628,9 @@ function comparisonDecision(items, sort = 'recommended') {
     { key: 'efficiency', label: 'efficiency', best: bestKnown('efficiency', 'max'), value: product => Number.isFinite(product.efficiency) ? product.efficiency : null }
   ];
   const winsFor = product => metricDefinitions.filter(metric => metric.best !== null && metric.value(product) === metric.best);
-  const balanced = [...items].sort((a, b) => winsFor(b).length - winsFor(a).length || productScreener.SORTS.protein.compare(a, b))[0];
+  const balanced = [...items].sort((a, b) => winsFor(b).length - winsFor(a).length || (Number(b.protein) - Number(a.protein)) || String(a.name).localeCompare(String(b.name)))[0];
   const sortDefinition = productScreener.SORTS[sort];
-  const sortedWinner = sortDefinition ? [...items].sort(sortDefinition.compare).find(sortDefinition.known) : null;
+  const sortedWinner = sortDefinition ? [...items].filter(product => sortDefinition.key === 'name' || Number.isFinite(productScreener.getMetric(product, sortDefinition.key))).sort((a,b) => sortDefinition.key === 'name' ? String(a.name).localeCompare(String(b.name)) : (sortDefinition.direction === 'desc' ? productScreener.getMetric(b,sortDefinition.key)-productScreener.getMetric(a,sortDefinition.key) : productScreener.getMetric(a,sortDefinition.key)-productScreener.getMetric(b,sortDefinition.key)))[0] : null;
   const criterionLabels = {
     protein: 'Most protein screen', calories: 'Fewest calories screen', efficiency: 'Protein-per-calorie screen',
     price: 'Lowest seeded cost screen', name: 'Product-name screen'
@@ -635,6 +717,13 @@ function render() {
   else if (currentRoute.name === 'basket') renderBasket();
   else if (currentRoute.name === 'compare') renderCompare();
   else renderProduct(currentRoute.id);
+  if (!sameRoute) {
+    const screen = app.querySelector('.screen');
+    if (screen) {
+      screen.classList.add('screen-enter');
+      screen.dataset.transition = previousRoute ? 'push' : 'initial';
+    }
+  }
   updateCounts();
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (routeKey(currentRoute) === routeKey(renderedRoute)) scrollTo(0, restoredScroll);
@@ -652,13 +741,32 @@ document.addEventListener('input', event => {
   }
 });
 
+function updateScreenCriterion(key, patch) {
+  state.screener = { ...state.screener, criteria: state.screener.criteria.map(item => item.key === key ? { ...item, ...patch } : item) };
+  state.screenerPage = 1;
+  state.screener = productScreener.normalize(state.screener, screenerCategories(), screenerStores());
+  persist(); syncScreenUrl(); renderScreener();
+}
+
+document.addEventListener('input', event => {
+  if (!event.target.matches('[data-criterion-range]')) return;
+  const paired = document.querySelector(`[data-criterion-number="${event.target.dataset.criterionRange}"][data-key="${event.target.dataset.key}"]`);
+  if (paired) paired.value = event.target.value;
+});
+
 document.addEventListener('change', event => {
   if (event.target.id === 'sort') { state.sort = event.target.value; persist(); renderDiscover(); }
   if (event.target.id === 'screenCategory') { state.screener = { ...state.screener, category: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
   if (event.target.id === 'screenMinProtein') { state.screener = { ...state.screener, minProtein: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
   if (event.target.id === 'screenMaxCalories') { state.screener = { ...state.screener, maxCalories: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
   if (event.target.id === 'screenPrep') { state.screener = { ...state.screener, prep: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
-  if (event.target.id === 'screenSort') { state.screener = { ...state.screener, sort: event.target.value }; state.screenerPage = 1; persist(); renderScreener(); }
+  if (event.target.id === 'screenSort') { state.screener = { ...state.screener, sort: event.target.value }; state.screenerPage = 1; persist(); syncScreenUrl(); renderScreener(); }
+  if (event.target.matches('[data-criterion-number]')) updateScreenCriterion(event.target.dataset.key, { [event.target.dataset.criterionNumber]: event.target.value });
+  if (event.target.matches('[data-criterion-range]')) updateScreenCriterion(event.target.dataset.key, { [event.target.dataset.criterionRange]: event.target.value });
+  if (event.target.matches('[data-criterion-unknown]')) updateScreenCriterion(event.target.dataset.criterionUnknown, { includeUnknown: event.target.checked });
+  if (event.target.matches('[data-facet-select]')) { state.screener = { ...state.screener, [event.target.dataset.facetSelect]: event.target.value }; persist(); syncScreenUrl(); renderScreener(); }
+  if (event.target.matches('[data-facet-check]')) { const key=event.target.dataset.facetCheck; const values=new Set(state.screener[key]); event.target.checked?values.add(event.target.value):values.delete(event.target.value); state.screener={...state.screener,[key]:[...values]}; persist(); syncScreenUrl(); renderScreener(); }
+  if (event.target.matches('[data-facet-text]')) { const key=event.target.dataset.facetText; const value=key==='allergens'?event.target.value.split(',').map(v=>v.trim().toLowerCase()).filter(Boolean):event.target.value; state.screener={...state.screener,[key]:value}; persist(); syncScreenUrl(); renderScreener(); }
   if (event.target.matches('[data-screen-exclusion]')) {
     const key = event.target.dataset.screenExclusion;
     const exclusions = new Set(state.screener.exclusions);
@@ -686,6 +794,25 @@ document.addEventListener('submit', event => {
     }
     return;
   }
+  if (event.target.id === 'searchAskForm') {
+    event.preventDefault();
+    state.askQuery = String(new FormData(event.target).get('query') || '').trim();
+    state.screener = productScreener.compile(state.askQuery, state.screener, groceryProducts);
+    state.screenerPage = 1; persist(); syncScreenUrl(); renderScreener();
+    liveRegion.textContent = `${productScreener.clauses(state.screener).length} criteria compiled into the live screen`;
+    requestAnimationFrame(() => document.querySelector('.personal-chips')?.scrollIntoView({block:'nearest'}));
+    return;
+  }
+  if (event.target.id === 'saveScreenForm') {
+    event.preventDefault();
+    const name = String(new FormData(event.target).get('name') || '').trim();
+    if (!name) { liveRegion.textContent = 'Name the screen before saving'; return; }
+    const id = `screen-${Date.now()}`;
+    state.savedScreens = [...state.savedScreens, { id, name, screen: state.screener }].slice(-12);
+    if (!state.defaultScreenId) state.defaultScreenId = id;
+    persist(); renderScreener(); liveRegion.textContent = `${name} saved on this device`;
+    return;
+  }
   if (event.target.id !== 'askForm') return;
   event.preventDefault();
   state.askQuery = String(new FormData(event.target).get('query') || '').trim();
@@ -695,6 +822,17 @@ document.addEventListener('submit', event => {
 });
 
 document.addEventListener('click', event => {
+  const add = event.target.closest('[data-add]');
+  if (add) {
+    event.preventDefault();
+    event.stopPropagation();
+    const source = add.closest('[data-screen-result]') ? 'search' :
+      add.closest('[data-compare-view]') ? 'compare' :
+      add.closest('[data-product-detail]') ? 'product' :
+      add.closest('[data-product-id]') ? 'home-or-saved' : 'product';
+    addToBasket(add.dataset.add, source);
+    return;
+  }
   const tab = event.target.closest('[data-tab]');
   if (tab) { event.preventDefault(); navigate(tab.getAttribute('href')); return; }
   const back = event.target.closest('[data-history-back]');
@@ -723,9 +861,19 @@ document.addEventListener('click', event => {
   const clearCompare = event.target.closest('[data-clear-compare]');
   if (clearCompare) { state.compare.clear(); persist(); render(); showToast('Comparison cleared'); return; }
   const screenTemplate = event.target.closest('[data-screen-template]');
-  if (screenTemplate) { state.screener = productScreener.applyTemplate(screenTemplate.dataset.screenTemplate, screenerCategories()); state.screenerPage = 1; persist(); renderScreener(); liveRegion.textContent = `${screenTemplate.textContent} screen applied`; return; }
+  if (screenTemplate) { state.screener = productScreener.applyTemplate(screenTemplate.dataset.screenTemplate, screenerCategories(), screenerStores()); state.screenerPage = 1; persist(); syncScreenUrl(); renderScreener(); liveRegion.textContent = `${screenTemplate.textContent} screen applied`; return; }
   const screenReset = event.target.closest('[data-screen-reset]');
-  if (screenReset) { state.screener = productScreener.normalize({}, screenerCategories()); state.screenerPage = 1; persist(); renderScreener(); liveRegion.textContent = 'Screen cleared'; return; }
+  if (screenReset) { state.screener = productScreener.normalize({}, screenerCategories(), screenerStores()); state.screenerPage = 1; persist(); syncScreenUrl(); renderScreener(); liveRegion.textContent = 'Screen cleared'; return; }
+  const addCriterion = event.target.closest('[data-add-criterion]');
+  if (addCriterion) { const value=document.querySelector('#criterionPicker')?.value||''; const [type,key]=value.split(':'); if(type==='numeric'&&productScreener.CRITERIA[key]) state.screener={...state.screener,criteria:[...state.screener.criteria,{key,min:null,max:null,includeUnknown:false}]}; if(type==='facet') state.screener={...state.screener,activeFacets:[...state.screener.activeFacets,key]}; persist(); syncScreenUrl(); renderScreener(); return; }
+  const removeCriterion = event.target.closest('[data-remove-criterion]');
+  if (removeCriterion) { state.screener={...state.screener,criteria:state.screener.criteria.filter(item=>item.key!==removeCriterion.dataset.removeCriterion)}; persist(); syncScreenUrl(); renderScreener(); return; }
+  const removeFacet = event.target.closest('[data-remove-facet]');
+  if (removeFacet) { const key=removeFacet.dataset.removeFacet; const reset={diet:'all',categories:[],stores:[],prep:[],ingredients:['ingredientInclude','ingredientExclude'],allergens:[]}; state.screener={...state.screener,activeFacets:state.screener.activeFacets.filter(item=>item!==key)}; if(key==='ingredients'){state.screener.ingredientInclude='';state.screener.ingredientExclude='';}else state.screener[key]=reset[key]; persist(); syncScreenUrl(); renderScreener(); return; }
+  const density = event.target.closest('[data-density]');
+  if (density) { state.screener={...state.screener,density:density.dataset.density}; persist(); syncScreenUrl(); renderScreener(); return; }
+  const loadScreen = event.target.closest('[data-load-screen]');
+  if (loadScreen) { const saved=state.savedScreens.find(item=>item.id===loadScreen.dataset.loadScreen); if(saved){state.screener=productScreener.normalize(saved.screen,screenerCategories(),screenerStores());persist();syncScreenUrl();renderScreener();} return; }
   const screenPage = event.target.closest('[data-screen-page]');
   if (screenPage) {
     state.screenerPage = Number(screenPage.dataset.screenPage);
@@ -736,12 +884,17 @@ document.addEventListener('click', event => {
   const removeScreenClause = event.target.closest('[data-remove-screen-clause]');
   if (removeScreenClause) {
     const key = removeScreenClause.dataset.removeScreenClause;
-    if (key.startsWith('exclude:')) state.screener = { ...state.screener, exclusions: state.screener.exclusions.filter(item => item !== key.slice(8)) };
-    else if (key === 'category') state.screener = { ...state.screener, category: 'All groceries' };
-    else if (key === 'prep') state.screener = { ...state.screener, prep: 'all' };
-    else state.screener = { ...state.screener, [key]: null };
+    if (key.startsWith('criterion:')) state.screener = { ...state.screener, criteria: state.screener.criteria.filter(item => item.key !== key.slice(10)) };
+    else if (key.startsWith('allergen:')) state.screener = { ...state.screener, allergens: state.screener.allergens.filter(item => item !== key.slice(9)) };
+    else if (key.startsWith('category:')) state.screener = { ...state.screener, categories: state.screener.categories.filter(item => item !== key.slice(9)) };
+    else if (key.startsWith('store:')) state.screener = { ...state.screener, stores: state.screener.stores.filter(item => item !== key.slice(6)) };
+    else if (key.startsWith('prep:')) state.screener = { ...state.screener, prep: state.screener.prep.filter(item => item !== key.slice(5)) };
+    else if (key === 'query') state.screener = { ...state.screener, query: '' };
+    else if (key === 'unparsed') state.screener = { ...state.screener, unparsed: [] };
+    else if (key === 'diet') state.screener = { ...state.screener, diet: 'all' };
+    else if (key === 'ingredientInclude' || key === 'ingredientExclude') state.screener = { ...state.screener, [key]: '' };
     state.screenerPage = 1;
-    persist(); renderScreener(); return;
+    persist(); syncScreenUrl(); renderScreener(); return;
   }
   const quickSort = event.target.closest('[data-quick-sort]');
   if (quickSort) {
@@ -761,15 +914,7 @@ document.addEventListener('click', event => {
     liveRegion.textContent = 'Pending report saved only on this device. It does not confirm inventory.';
     return;
   }
-  const add = event.target.closest('[data-add]');
-  if (add) {
-    const product = byId(add.dataset.add);
-    if (!state.basket.includes(add.dataset.add)) {
-      state.basket.push(add.dataset.add); persist(); render();
-      showToast(`${product?.name || 'Product'} added to basket`, { href: '#basket', label: 'View basket' });
-    } else showToast(`${product?.name || 'Product'} is already in your basket`, { href: '#basket', label: 'View basket' });
-    return;
-  }
+
   const remove = event.target.closest('[data-remove]');
   if (remove) { const product = byId(remove.dataset.remove); state.basket = state.basket.filter(id => id !== remove.dataset.remove); persist(); renderBasket(); showToast(`${product?.name || 'Product'} removed from basket`); return; }
   const dismissToast = event.target.closest('[data-dismiss-toast]');
@@ -778,6 +923,8 @@ document.addEventListener('click', event => {
   if (category) { state.category = category.dataset.category; persist(); renderDiscover(); return; }
   const askPrompt = event.target.closest('[data-ask-prompt]');
   if (askPrompt) { state.askQuery = askPrompt.dataset.askPrompt; state.askAnswer = answerAsk({query:state.askQuery, products:groceryProducts, basketIds:state.basket}); renderAsk(); return; }
+  const searchPrompt = event.target.closest('[data-search-prompt]');
+  if (searchPrompt) { state.askQuery = searchPrompt.dataset.searchPrompt; state.screener=productScreener.compile(state.askQuery,state.screener,groceryProducts); persist(); syncScreenUrl(); renderScreener(); return; }
   const stateAction = event.target.closest('[data-state-action]');
   if (stateAction) { state.dataState = navigator.onLine ? 'ready' : 'offline'; renderDiscover(); return; }
   const useLocation = event.target.closest('[data-use-location]');
@@ -809,7 +956,13 @@ document.addEventListener('click', event => {
   if (localLink) { event.preventDefault(); captureDecisionContext(); persist(); navigate(localLink.getAttribute('href')); }
 });
 
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => {
+  if (currentRoute) {
+    state.scroll[routeKey(currentRoute)] = Math.round(scrollY);
+    sessionStorage.setItem(scrollKey, JSON.stringify(state.scroll));
+  }
+  render();
+});
 window.addEventListener('beforeunload', saveScroll);
 window.addEventListener('offline', () => { state.dataState = 'offline'; if (currentRoute?.name === 'discover') renderDiscover(); });
 window.addEventListener('online', () => { state.dataState = 'ready'; if (currentRoute?.name === 'discover') renderDiscover(); });
