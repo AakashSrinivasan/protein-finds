@@ -12,6 +12,9 @@
     "test:shell": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node mobile-shell-test.js",
     "test:location": "node --test location-data.test.js && REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node location-browser-test.js",
     "test:journey": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node foster-city-journey-test.js",
+    "test:screen": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node enhanced-screen-test.js",
+    "test:basket": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node basket-action-test.js",
+    "test:a11y": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node search-reset-a11y-test.js",
     "verify": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node review-test.js",
     "test:pwa": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node pwa-test.js && node pwa-upgrade-test.js",
     "serve": "python3 -m http.server 4173"

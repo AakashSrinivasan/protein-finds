@@ -77,15 +77,16 @@ async function exerciseJourney(browserType) {
   await page.locator('[data-compare="beyond-steak"]').click();
   await page.locator('[data-tab="screener"]').click();
   await page.waitForSelector('[data-screen="screener"]');
-  const builder = page.locator('#screenBuilder');
-  if (!(await builder.getAttribute('open'))) await builder.locator('summary').click();
-  await page.fill('#screenMinProtein', '10');
-  await page.locator('#screenMinProtein').press('Tab');
+  await page.selectOption('#criterionPicker', 'numeric:protein');
+  await page.locator('[data-add-criterion]').click();
+  const minimumProtein = page.locator('[data-criterion-number="min"][data-key="protein"]');
+  await minimumProtein.fill('10');
+  await minimumProtein.press('Tab');
   await page.selectOption('#screenSort', 'protein');
   await page.locator('[data-screen-result="quest-cookie"] [data-compare]').click();
   await page.evaluate(() => scrollTo(0, Math.min(1400, document.documentElement.scrollHeight - innerHeight)));
   const selectedCriteria = await page.evaluate(() => ({
-    minProtein: document.querySelector('#screenMinProtein').value,
+    minProtein: document.querySelector('[data-criterion-number="min"][data-key="protein"]').value,
     sort: document.querySelector('#screenSort').value
   }));
   await page.evaluate(() => document.querySelector('[data-compare-tray] a[href="#compare"]').click());
@@ -96,7 +97,7 @@ async function exerciseJourney(browserType) {
   await page.waitForSelector('[data-screen="screener"]');
   await page.waitForFunction(expected => Math.abs(scrollY - expected) < 8, savedScreenerScroll);
   assert.deepEqual(await page.evaluate(() => ({
-    minProtein: document.querySelector('#screenMinProtein').value,
+    minProtein: document.querySelector('[data-criterion-number="min"][data-key="protein"]').value,
     sort: document.querySelector('#screenSort').value
   })), selectedCriteria, 'Compare/Back restores exact Screener criteria');
 
