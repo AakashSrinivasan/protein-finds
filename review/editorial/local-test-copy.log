@@ -1,0 +1,5 @@
+
+> vegetarian-protein-bible@1.0.0 test:copy
+> REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node consumer-copy-test.js
+
+PASS: consumer copy guard scanned served source and rendered route/state matrix in Chromium and WebKit

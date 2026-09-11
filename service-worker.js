@@ -1,6 +1,6 @@
-const CACHE = 'protein-finds-shell-v21';
-const SHELL=['./','./index.html','./app-shell.css?v=19','./data.js?v=12','./product-screener.js?v=17','./location-data.js?v=12','./ask-protein.js?v=12','./vendor/leaflet/leaflet.js','./vendor/leaflet/leaflet.css','./vendor/leaflet/images/marker-icon.png','./vendor/leaflet/images/marker-icon-2x.png','./vendor/leaflet/images/marker-shadow.png','./app.js?v=20','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png','./images/products/boca-original-0759283334455.jpg','./images/products/beyond-steak-0810057290831.jpg','./images/products/quest-cookie-0888849005994.jpg'];
-SHELL.push('./dark-premium.css?v=21', './premium-interactions.js?v=21');
+const CACHE = 'protein-finds-shell-v22';
+const SHELL=['./','./index.html','./app-shell.css?v=22','./data.js?v=22','./product-screener.js?v=22','./location-data.js?v=22','./ask-protein.js?v=22','./vendor/leaflet/leaflet.js','./vendor/leaflet/leaflet.css','./vendor/leaflet/images/marker-icon.png','./vendor/leaflet/images/marker-icon-2x.png','./vendor/leaflet/images/marker-shadow.png','./app.js?v=22','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png','./images/products/boca-original-0759283334455.jpg','./images/products/beyond-steak-0810057290831.jpg','./images/products/quest-cookie-0888849005994.jpg'];
+SHELL.push('./fonts/dm-sans.ttf', './fonts/instrument-serif.ttf', './images/products/boca-original-crop.jpg');
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{

@@ -373,7 +373,8 @@ function featuredCard(product, index, goal) {
   const label = index === 0 ? `${goal.short} leader` : `#${index + 1} for ${goal.short.toLowerCase()}`;
   return `<article class="featured-card" data-featured-id="${product.id}" data-product-id="${product.id}">
     <a class="featured-media" href="#product/${product.id}" aria-label="View ${product.name}">${imageMarkup(product)}</a>
-    <div class="featured-copy"><div class="featured-info"><span>${label}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.brand} · ${product.stores[0] || 'Store unknown'}</p><p class="featured-verdict">${productVerdict(product)}</p><div class="featured-metrics"><b>${product.protein}g</b><small>protein</small><b>${product.calories}</b><small>cal</small><b>${hasKnownPrice(product) ? money(product.pricePer25) : '—'}</b><small>value</small></div></div><div class="featured-actions"><a class="primary" href="#product/${product.id}">View find</a></div></div>
+    <button class="featured-save" type="button" data-save="${product.id}" aria-label="${state.saved.has(product.id) ? 'Remove' : 'Save'} ${product.name}" aria-pressed="${state.saved.has(product.id)}">${state.saved.has(product.id) ? '♥' : '♡'}</button>
+    <div class="featured-copy"><div class="featured-info"><span>${product.brand}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.stores[0] || 'Store unknown'}</p><div class="featured-metrics"><b>${product.protein}g</b><small>protein</small><small>· ${product.calories} cal</small></div><div class="featured-price">${product.exactSku || !hasKnownPrice(product) ? 'Price unknown' : `${money(product.pricePer25)} / 25g protein · sample`}</div></div><div class="featured-actions"><a class="primary" href="#product/${product.id}">View find</a><button type="button" data-add="${product.id}" aria-label="Add ${product.name} to basket" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? '✓' : '+'}</button></div></div>
   </article>`;
 }
 
@@ -391,11 +392,12 @@ function renderDiscover() {
   const blockingState = ['loading', 'error', 'empty'].includes(state.dataState);
   const visibleState = ['loading', 'error', 'empty', 'offline', 'stale'].includes(state.dataState) ? stateMarkup(state.dataState) : '';
   app.innerHTML = `<section class="screen discover-screen consumer-home" data-screen="discover">
-    <header class="home-intro"><div><p>Vegetarian protein</p><h1 id="screenTitle">What sounds good?</h1></div><a href="#nearby"><b>Foster City · 94404</b><small>Change location</small></a></header>
-    <a class="home-search" href="#screener"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><b>Search protein, brands, or stores</b></a>
+    <header class="home-intro"><div><p>The everyday protein edit</p><h1 id="screenTitle">Good finds. Better fuel.</h1></div><a href="#nearby"><b>Foster City · 94404</b><small>Change location</small></a></header>
+    <form class="home-search" id="homeSearchForm"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input name="query" aria-label="Search protein, brands, or stores" placeholder="Find your next favorite…"><button type="submit" aria-label="Search products">→</button></form>
     <div class="hero-actions home-goals" aria-label="Shopping goal">${[['protein','Most protein'],['efficiency','Leanest'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>
     ${visibleState}
     ${!blockingState && featured.length ? `<section class="featured-section home-recommendations"><div class="section-title"><div><h2>Top picks</h2><small>${goal.title}</small></div><a href="#screener">See all</a></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : (!visibleState ? stateMarkup('empty') : '')}
+    <section class="collection-section"><div class="section-title"><h2>A little inspiration</h2><a href="#screener">Explore all →</a></div><div class="collection-grid">${[['Breakfast','The morning edit','Start strong'],['Plant meat','Dinner, reimagined','Plant-powered'],['Snack','Small bites. Big fuel.','Between meals'],['Milk & shakes','Sip something good','On the go']].map(([query,title,kicker])=>`<button type="button" data-collection="${query}"><small>${kicker}</small><b>${title}</b><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>`).join('')}</div></section>
     <a class="home-nearby-row" href="#nearby"><span>Nearby</span><b>Browse ${locationData.STORES.length} Foster City stores</b><i>→</i></a>
     <details class="surface-truth"><summary>About product info</summary><p>Prices and inventory may be out of date. Open a product to see when its source was last checked.</p></details>
   </section>`;
@@ -816,7 +818,24 @@ document.addEventListener('keydown', event => {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 });
 
+document.addEventListener('click', event => {
+  const collection = event.target.closest('[data-collection]');
+  if (!collection) return;
+  state.askQuery = '';
+  state.screener = productScreener.normalize({ activeFacets: ['categories'], categories: [collection.dataset.collection] }, screenerCategories(), screenerStores());
+  state.screenerPage = 1;
+  persist();
+  navigate('#screener');
+});
+
 document.addEventListener('submit', event => {
+  if (event.target.id === 'homeSearchForm') {
+    event.preventDefault();
+    state.askQuery = String(new FormData(event.target).get('query') || '').trim();
+    state.screener = productScreener.compile(state.askQuery, productScreener.normalize({}, screenerCategories(), screenerStores()), groceryProducts);
+    state.screenerPage = 1; persist(); navigate('#screener');
+    return;
+  }
   if (event.target.id === 'locationForm') {
     event.preventDefault();
     const center = locationData.findZipCenter(new FormData(event.target).get('zip'));

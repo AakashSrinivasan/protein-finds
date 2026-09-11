@@ -1,0 +1,45 @@
+
+> vegetarian-protein-bible@1.0.0 test:location
+> node --test location-data.test.js && REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node location-browser-test.js
+
+TAP version 13
+# Subtest: ZIP fallback accepts a five-digit ZIP or ZIP+4 and rejects unsupported locations
+ok 1 - ZIP fallback accepts a five-digit ZIP or ZIP+4 and rejects unsupported locations
+  ---
+  duration_ms: 0.846577
+  type: 'test'
+  ...
+# Subtest: ZIP and store coordinates carry inspectable source records
+ok 2 - ZIP and store coordinates carry inspectable source records
+  ---
+  duration_ms: 0.472809
+  type: 'test'
+  ...
+# Subtest: Foster City market indexes the four requested retailer handoffs
+ok 3 - Foster City market indexes the four requested retailer handoffs
+  ---
+  duration_ms: 0.764743
+  type: 'test'
+  ...
+# Subtest: distance is deterministic, symmetric, and sorted for nearby stores
+ok 4 - distance is deterministic, symmetric, and sorted for nearby stores
+  ---
+  duration_ms: 0.317062
+  type: 'test'
+  ...
+# Subtest: nearby results never infer inventory from proximity
+ok 5 - nearby results never infer inventory from proximity
+  ---
+  duration_ms: 0.24554
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 83.315376
+PASS: opt-in geolocation, denial fallback, sourced ZIP distances, honest availability, synchronized map/list Search here, mobile WebKit, and Axe
