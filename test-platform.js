@@ -27,8 +27,9 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.equal(await page.locator('.home-search').isVisible(), true, 'dominant search is in the first screen');
   assert.equal(await page.locator('.home-intro a[href="#nearby"]').isVisible(), true, 'location context is immediately actionable');
   assert.equal(await page.locator('[data-featured-id]').count(), 5, 'Home exposes an image-led recommendation rail');
-  assert.equal(await page.locator('[data-featured-id] .featured-actions > *').count(), 5, 'each recommendation has one primary action');
-  assert.equal(await page.locator('[data-featured-id] [data-add],[data-featured-id] [data-compare]').count(), 0, 'secondary actions moved out of Home cards');
+  assert.equal(await page.locator('[data-featured-id] .featured-actions .primary').count(), 5, 'each recommendation has one primary detail action');
+  assert.equal(await page.locator('[data-featured-id] [data-add]').count(), 5, 'each recommendation has one quick-add action');
+  assert.equal(await page.locator('[data-featured-id] [data-compare]').count(), 0, 'comparison stays in Search');
   assert.deepEqual(
     await page.locator('[data-tab]').evaluateAll(tabs => tabs.map(tab => ({ route: tab.dataset.tab, label: tab.querySelector('b').textContent }))),
     [
@@ -48,7 +49,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
     animationName: getComputedStyle(element).animationName,
     opacity: getComputedStyle(element).opacity
   }));
-  assert.match(motion.animationName, /screen-rise|screen-push/, 'route content receives a functional transition');
+  assert.match(motion.animationName, /editorial-route/, 'route content receives a functional transition');
   assert.equal(motion.opacity, '1', 'route motion never hides content from accessibility checks');
 
   const initialFeatured = await page.locator('[data-featured-id]').evaluateAll(cards => cards.map(card => card.dataset.featuredId));
@@ -86,7 +87,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
 
   await page.locator('[data-screen-result="boca-original"] .screen-product a').click();
   await page.waitForSelector('[data-screen="product"]');
-  assert.equal(await page.locator('.detail-actions').evaluate(element => getComputedStyle(element).position), 'sticky', 'product actions remain reachable in a sticky action dock');
+  assert.equal(await page.locator('.detail-actions').evaluate(element => getComputedStyle(element).position), 'fixed', 'product actions remain reachable in a fixed action dock');
   await page.locator('[data-save="boca-original"]').click();
   assert.equal(await page.locator('#savedCount').textContent(), '1', 'save count bumps in navigation');
   await page.locator('[data-tab="saved"]').click();

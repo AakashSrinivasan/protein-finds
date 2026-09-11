@@ -82,7 +82,7 @@ async function audit(page, label) {
     await page.goto(`${url.split('#')[0]}#product/beyond-steak`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-screen="product"] .detail-actions');
     await audit(page, `${viewport.name}/product`);
-    assert.equal(await page.locator('.detail-actions').evaluate(element => getComputedStyle(element).position), 'sticky', `${viewport.name}: product action dock is sticky`);
+    assert.equal(await page.locator('.detail-actions').evaluate(element => getComputedStyle(element).position), 'fixed', `${viewport.name}: product action dock is fixed`);
     const productShot = path.join(out, `${viewport.name}-product.png`);
     await page.screenshot({ path: productShot, fullPage: true });
 

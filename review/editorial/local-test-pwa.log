@@ -1,0 +1,6 @@
+
+> vegetarian-protein-bible@1.0.0 test:pwa
+> REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node pwa-test.js && node pwa-upgrade-test.js
+
+PASS: install guidance, active service worker, cached Home imagery/catalog, explicit offline state, integrated offline Search/action, fixed navigation, and reload persistence
+PASS: actual cached v21 profile upgrades to v22 on its first post-deploy visit via versioned new assets and preserves Search state/scroll

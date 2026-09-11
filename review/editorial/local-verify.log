@@ -1,0 +1,6 @@
+
+> vegetarian-protein-bible@1.0.0 verify
+> REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node review-test.js
+
+PASS: responsive, accessibility, console, motion, product, search and Nearby review (5 viewports)
+/root/projects/protein-finds-editorial/review/hard-reset

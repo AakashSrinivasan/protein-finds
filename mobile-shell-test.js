@@ -142,7 +142,7 @@ async function assertDesktopComposition() {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-screen="discover"] [data-featured-id]');
   const navigationBox = await page.locator('[data-bottom-nav]').boundingBox();
-  assert.ok(navigationBox && navigationBox.y < 160 && navigationBox.y + navigationBox.height < 700, 'desktop: navigation composes as a compact side rail');
+  assert.ok(navigationBox && navigationBox.width <= 620 && navigationBox.y >= 800 && navigationBox.y + navigationBox.height <= 900, 'desktop: navigation composes as a compact bottom dock');
   assert.ok(await page.locator('[data-featured-id]').count() >= 3, 'desktop: at least three goal-matched decisions compose in the workspace');
   await page.locator('[data-tab="screener"]').click();
   await page.waitForSelector('[data-screen="screener"] [data-screen-result]');

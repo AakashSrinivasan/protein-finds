@@ -1,0 +1,7 @@
+
+> vegetarian-protein-bible@1.0.0 test:screen
+> REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node enhanced-screen-test.js
+
+PASS chromium 390x844
+PASS webkit 390x844
+PASS webkit 844x390
