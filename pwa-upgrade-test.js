@@ -38,13 +38,12 @@ self.addEventListener('fetch', event => {
 
 function extractLegacyRelease(destination) {
   const archive = path.join(destination, 'legacy.tar');
-  const result = childProcess.spawnSync('git', ['archive', '--format=tar', '-o', archive, 'b2ebbf8'], {
+  const result = childProcess.spawnSync('git', ['archive', '--format=tar', '-o', archive, '8832203cf81417fe566ae5390ffe0c63bbb32cb8'], {
     cwd: __dirname,
     encoding: 'utf8'
   });
   if (result.status !== 0) {
-    writePortableLegacyRelease(destination);
-    return;
+    throw new Error('The actual preceding v20 release is required for this release upgrade gate');
   }
   fs.mkdirSync(path.join(destination, 'legacy'), { recursive: true });
   const extract = childProcess.spawnSync('tar', ['-xf', archive, '-C', path.join(destination, 'legacy')], { encoding: 'utf8' });
@@ -91,8 +90,8 @@ function extractLegacyRelease(destination) {
     await legacyPage.waitForSelector('[data-product-id]');
     await legacyPage.evaluate(() => navigator.serviceWorker.ready);
     await legacyPage.reload({ waitUntil: 'domcontentloaded' });
-    assert.equal(await legacyPage.locator('[data-tab="screener"]').count(), 0, 'prior release is genuinely cached without Screener');
-    assert.ok(await legacyPage.evaluate(async () => (await caches.keys()).includes('protein-finds-shell-v10')), 'returning profile contains the prior v10 shell cache');
+    assert.equal(await legacyPage.locator('link[href*="dark-premium"]').count(), 0, 'actual prior release has no dark redesign');
+    assert.ok(await legacyPage.evaluate(async () => (await caches.keys()).includes('protein-finds-shell-v20')), 'returning profile contains the actual prior v20 shell cache');
     await legacyPage.close();
 
     activeRoot = __dirname;
@@ -109,8 +108,8 @@ function extractLegacyRelease(destination) {
       'first post-deploy visit upgrades the returning profile to the five-tab shell'
     );
     const criticalAssets = await returningPage.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name));
-    for (const asset of ['app-shell.css', 'data.js', 'product-screener.js', 'location-data.js', 'ask-protein.js', 'app.js']) {
-      const expectedVersion = asset === 'app-shell.css' ? 19 : asset === 'app.js' ? 20 : asset === 'product-screener.js' ? 17 : 12;
+    for (const asset of ['dark-premium.css', 'premium-interactions.js', 'app-shell.css', 'data.js', 'product-screener.js', 'location-data.js', 'ask-protein.js', 'app.js']) {
+      const expectedVersion = ['dark-premium.css', 'premium-interactions.js'].includes(asset) ? 21 : asset === 'app-shell.css' ? 19 : asset === 'app.js' ? 20 : asset === 'product-screener.js' ? 17 : 12;
       assert.ok(criticalAssets.some(url => url.includes(`/${asset}?v=${expectedVersion}`)), `${asset} loads through its v${expectedVersion} cache-miss URL`);
     }
 
@@ -140,7 +139,9 @@ function extractLegacyRelease(destination) {
     assert.equal(await returningPage.inputValue('[data-criterion-number="min"][data-key="protein"]'), '10', 'Screener state survives the first upgraded visit');
     assert.deepEqual(errors, [], 'returning-client upgrade has zero console or page errors');
 
-    console.log('PASS: cached v10 profile upgrades on its first post-deploy visit via versioned critical assets and preserves Screener state/scroll');
+    await returningPage.waitForFunction(async () => (await caches.keys()).includes('protein-finds-shell-v21'));
+    assert.equal(await returningPage.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(11, 16, 14)', 'first returning navigation renders the dark release');
+    console.log('PASS: actual cached v20 profile upgrades to v21 on its first post-deploy visit via versioned new assets and preserves Search state/scroll');
   } finally {
     await context.close();
     await new Promise(resolve => server.close(resolve));

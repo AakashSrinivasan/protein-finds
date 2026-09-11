@@ -1,0 +1,5 @@
+
+> vegetarian-protein-bible@1.0.0 test:journey
+> REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node foster-city-journey-test.js
+
+PASS: exact SKU → evaluate → nearby Target → retailer handoff → pending-local confirmation in Chromium and WebKit

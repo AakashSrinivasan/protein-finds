@@ -1,0 +1,1 @@
+PASS: dark rendered styles, mobile next-product interaction, reduced-motion disabling, page-error guard, phone/desktop/landscape captures

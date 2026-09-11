@@ -1,0 +1,5 @@
+
+> vegetarian-protein-bible@1.0.0 test:shell
+> REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node mobile-shell-test.js
+
+PASS: Home/Search IA, goals and filter sheet, result count, exact query/deep link, Back state/scroll, save/add, Nearby, Basket, 44px targets, first-viewport/safe-area geometry, dynamic states, WebKit portrait/landscape, desktop composition, overflow, and console checks

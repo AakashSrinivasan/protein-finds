@@ -1,0 +1,49 @@
+
+> vegetarian-protein-bible@1.0.0 test:a11y
+> REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node search-reset-a11y-test.js
+
+PASS: Search Reset contrast, focus, target size, and full Axe scan in populated, empty, and filter-open states across Chromium and WebKit
+{
+  "Chromium/default-filter": {
+    "default": 10.63,
+    "hover": 10.63,
+    "focus": 10.63,
+    "pressed": 10.63,
+    "disabled": 10.63
+  },
+  "Chromium/populated-filter": {
+    "default": 10.63,
+    "hover": 10.63,
+    "focus": 10.63,
+    "pressed": 10.63,
+    "disabled": 10.63
+  },
+  "Chromium/filter-open": {
+    "default": 10.63,
+    "hover": 10.63,
+    "focus": 10.63,
+    "pressed": 10.63,
+    "disabled": 10.63
+  },
+  "WebKit/default-filter": {
+    "default": 10.63,
+    "hover": 10.63,
+    "focus": 10.63,
+    "pressed": 10.63,
+    "disabled": 10.63
+  },
+  "WebKit/populated-filter": {
+    "default": 10.63,
+    "hover": 10.63,
+    "focus": 10.63,
+    "pressed": 10.63,
+    "disabled": 10.63
+  },
+  "WebKit/filter-open": {
+    "default": 10.63,
+    "hover": 10.63,
+    "focus": 10.63,
+    "pressed": 10.63,
+    "disabled": 10.63
+  }
+}

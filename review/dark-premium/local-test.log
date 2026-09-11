@@ -1,0 +1,333 @@
+
+> vegetarian-protein-bible@1.0.0 test
+> node --test catalog-contract.test.js catalog-import.test.js location-data.test.js ask-protein.test.js product-screener.test.js foster-city-data.test.js && node test-platform.js
+
+TAP version 13
+# Subtest: plans common intents deterministically and visibly
+ok 1 - plans common intents deterministically and visibly
+  ---
+  duration_ms: 2.120706
+  type: 'test'
+  ...
+# Subtest: answers supported discovery requests only from catalog records
+ok 2 - answers supported discovery requests only from catalog records
+  ---
+  duration_ms: 1.604789
+  type: 'test'
+  ...
+# Subtest: basket improvement uses the exact basket and fills missing grocery-trip categories
+ok 3 - basket improvement uses the exact basket and fills missing grocery-trip categories
+  ---
+  duration_ms: 0.418509
+  type: 'test'
+  ...
+# Subtest: reports unknown price, store, and freshness honestly
+ok 4 - reports unknown price, store, and freshness honestly
+  ---
+  duration_ms: 0.292386
+  type: 'test'
+  ...
+# Subtest: fails closed for unsupported, hostile, and empty requests
+ok 5 - fails closed for unsupported, hostile, and empty requests
+  ---
+  duration_ms: 0.439961
+  type: 'test'
+  ...
+# Subtest: fixtures use the versioned contract and cover the five required cases
+ok 6 - fixtures use the versioned contract and cover the five required cases
+  ---
+  duration_ms: 4.04273
+  type: 'test'
+  ...
+# Subtest: product identity is separate from store observations
+ok 7 - product identity is separate from store observations
+  ---
+  duration_ms: 0.325646
+  type: 'test'
+  ...
+# Subtest: nutrition, ingredients, price, and availability have provenance and verification state
+ok 8 - nutrition, ingredients, price, and availability have provenance and verification state
+  ---
+  duration_ms: 0.349563
+  type: 'test'
+  ...
+# Subtest: field-specific observation schemas reject malformed known and unknown values
+ok 9 - field-specific observation schemas reject malformed known and unknown values
+  ---
+  duration_ms: 3.073371
+  type: 'test'
+  ...
+# Subtest: explicit unknown observation values require a non-empty reason and cannot carry known fields
+ok 10 - explicit unknown observation values require a non-empty reason and cannot carry known fields
+  ---
+  duration_ms: 0.518382
+  type: 'test'
+  ...
+# Subtest: product/package identity shapes are strict for packaged and whole-food records
+ok 11 - product/package identity shapes are strict for packaged and whole-food records
+  ---
+  duration_ms: 0.697706
+  type: 'test'
+  ...
+# Subtest: media is first-class, retrievable, verified, hashed, and exactly identity-bound
+ok 12 - media is first-class, retrievable, verified, hashed, and exactly identity-bound
+  ---
+  duration_ms: 0.806582
+  type: 'test'
+  ...
+# Subtest: every image slot has either one matching verified asset or an explicit missing reason
+ok 13 - every image slot has either one matching verified asset or an explicit missing reason
+  ---
+  duration_ms: 0.31448
+  type: 'test'
+  ...
+# Subtest: conflicts enforce exact field paths, reciprocal linkage, and reviewed resolution
+ok 14 - conflicts enforce exact field paths, reciprocal linkage, and reviewed resolution
+  ---
+  duration_ms: 0.745237
+  type: 'test'
+  ...
+# Subtest: strict UTC ISO-8601 timestamps reject human-readable dates and impossible dates
+ok 15 - strict UTC ISO-8601 timestamps reject human-readable dates and impossible dates
+  ---
+  duration_ms: 0.575459
+  type: 'test'
+  ...
+# Subtest: unknown score inputs remain unknown instead of receiving favorable defaults
+ok 16 - unknown score inputs remain unknown instead of receiving favorable defaults
+  ---
+  duration_ms: 0.540986
+  type: 'test'
+  ...
+# Subtest: all six pure axes are deterministic and independently explainable
+ok 17 - all six pure axes are deterministic and independently explainable
+  ---
+  duration_ms: 0.424889
+  type: 'test'
+  ...
+# Subtest: provenance-aware scoring admits only explicit, fresh, source-backed evidence
+ok 18 - provenance-aware scoring admits only explicit, fresh, source-backed evidence
+  ---
+  duration_ms: 1.641627
+  type: 'test'
+  ...
+# Subtest: score admission rejects open conflicts, stale evidence, unknown values, and currency mismatch
+ok 19 - score admission rejects open conflicts, stale evidence, unknown values, and currency mismatch
+  ---
+  duration_ms: 1.123185
+  type: 'test'
+  ...
+# Subtest: ranking requires explicit weights and reports coverage without imputing missing axes
+ok 20 - ranking requires explicit weights and reports coverage without imputing missing axes
+  ---
+  duration_ms: 0.401773
+  type: 'test'
+  ...
+# Subtest: all-unknown rankings remain deterministic and visibly unsupported
+ok 21 - all-unknown rankings remain deterministic and visibly unsupported
+  ---
+  duration_ms: 6.330273
+  type: 'test'
+  ...
+# Subtest: validator rejects silent truth defaults and malformed source boundaries
+ok 22 - validator rejects silent truth defaults and malformed source boundaries
+  ---
+  duration_ms: 0.385157
+  type: 'test'
+  ...
+# Subtest: CSV parser handles quoted commas and preserves exact raw records
+ok 23 - CSV parser handles quoted commas and preserves exact raw records
+  ---
+  duration_ms: 2.711389
+  type: 'test'
+  ...
+# Subtest: stages every source row before canonical mutation with machine-readable outcomes
+ok 24 - stages every source row before canonical mutation with machine-readable outcomes
+  ---
+  duration_ms: 8.166064
+  type: 'test'
+  ...
+# Subtest: routes duplicate identities, verified conflicts, stale rows, bad units, and partial rows correctly
+ok 25 - routes duplicate identities, verified conflicts, stale rows, bad units, and partial rows correctly
+  ---
+  duration_ms: 1.346126
+  type: 'test'
+  ...
+# Subtest: routes observations for a product field with an open canonical conflict to review
+ok 26 - routes observations for a product field with an open canonical conflict to review
+  ---
+  duration_ms: 1.206251
+  type: 'test'
+  ...
+# Subtest: accepts valid JSON rows and applies only accepted candidates after staging
+ok 27 - accepts valid JSON rows and applies only accepted candidates after staging
+  ---
+  duration_ms: 2.283737
+  type: 'test'
+  ...
+# Subtest: rejects implausible nutrition and invalid diet/allergen flags without inventing values
+ok 28 - rejects implausible nutrition and invalid diet/allergen flags without inventing values
+  ---
+  duration_ms: 0.649702
+  type: 'test'
+  ...
+# Subtest: routes source-id and matched-product metadata conflicts to review
+ok 29 - routes source-id and matched-product metadata conflicts to review
+  ---
+  duration_ms: 0.542708
+  type: 'test'
+  ...
+# Subtest: routes a reused UPC with conflicting package identity to review
+ok 30 - routes a reused UPC with conflicting package identity to review
+  ---
+  duration_ms: 0.515078
+  type: 'test'
+  ...
+# Subtest: accepted application revalidates against canonical changes made after staging
+ok 31 - accepted application revalidates against canonical changes made after staging
+  ---
+  duration_ms: 1.540471
+  type: 'test'
+  ...
+# Subtest: rejects rows that contain identity but no observation payload
+ok 32 - rejects rows that contain identity but no observation payload
+  ---
+  duration_ms: 0.724846
+  type: 'test'
+  ...
+# Subtest: routes colliding source row IDs to review before generated observation IDs collide
+ok 33 - routes colliding source row IDs to review before generated observation IDs collide
+  ---
+  duration_ms: 0.784929
+  type: 'test'
+  ...
+# Subtest: fails closed on malformed input and invalid import options
+ok 34 - fails closed on malformed input and invalid import options
+  ---
+  duration_ms: 0.558402
+  type: 'test'
+  ...
+# Subtest: Beyond Steak UPC resolves to one exact SKU with typed exact-product and Target-search handoffs
+ok 35 - Beyond Steak UPC resolves to one exact SKU with typed exact-product and Target-search handoffs
+  ---
+  duration_ms: 3.415984
+  type: 'test'
+  ...
+# Subtest: all photographed exact SKUs have identity/nutrition evidence; only verified pages use an exact retailer CTA
+ok 36 - all photographed exact SKUs have identity/nutrition evidence; only verified pages use an exact retailer CTA
+  ---
+  duration_ms: 2.570614
+  type: 'test'
+  ...
+# Subtest: ZIP fallback accepts a five-digit ZIP or ZIP+4 and rejects unsupported locations
+ok 37 - ZIP fallback accepts a five-digit ZIP or ZIP+4 and rejects unsupported locations
+  ---
+  duration_ms: 0.988298
+  type: 'test'
+  ...
+# Subtest: ZIP and store coordinates carry inspectable source records
+ok 38 - ZIP and store coordinates carry inspectable source records
+  ---
+  duration_ms: 0.482225
+  type: 'test'
+  ...
+# Subtest: Foster City market indexes the four requested retailer handoffs
+ok 39 - Foster City market indexes the four requested retailer handoffs
+  ---
+  duration_ms: 0.730554
+  type: 'test'
+  ...
+# Subtest: distance is deterministic, symmetric, and sorted for nearby stores
+ok 40 - distance is deterministic, symmetric, and sorted for nearby stores
+  ---
+  duration_ms: 0.406341
+  type: 'test'
+  ...
+# Subtest: nearby results never infer inventory from proximity
+ok 41 - nearby results never infer inventory from proximity
+  ---
+  duration_ms: 0.38654
+  type: 'test'
+  ...
+# Subtest: default screen keeps all grocery products and exposes only evidence-backed numeric criteria
+ok 42 - default screen keeps all grocery products and exposes only evidence-backed numeric criteria
+  ---
+  duration_ms: 10.964056
+  type: 'test'
+  ...
+# Subtest: inclusive min/max ranges compose with AND semantics
+ok 43 - inclusive min/max ranges compose with AND semantics
+  ---
+  duration_ms: 0.625044
+  type: 'test'
+  ...
+# Subtest: unknown values fail closed unless user explicitly includes them
+ok 44 - unknown values fail closed unless user explicitly includes them
+  ---
+  duration_ms: 0.25593
+  type: 'test'
+  ...
+# Subtest: range normalization swaps reversed endpoints and rejects unsupported keys
+ok 45 - range normalization swaps reversed endpoints and rejects unsupported keys
+  ---
+  duration_ms: 0.178113
+  type: 'test'
+  ...
+# Subtest: diet, store, preparation, ingredients and user allergens fail closed
+ok 46 - diet, store, preparation, ingredients and user allergens fail closed
+  ---
+  duration_ms: 0.239415
+  type: 'test'
+  ...
+# Subtest: natural language compiles into the same editable screen
+ok 47 - natural language compiles into the same editable screen
+  ---
+  duration_ms: 4.671571
+  type: 'test'
+  ...
+# Subtest: best protein cereal uses normalized searchable evidence rather than an ID special case
+ok 48 - best protein cereal uses normalized searchable evidence rather than an ID special case
+  ---
+  duration_ms: 2.112455
+  type: 'test'
+  ...
+# Subtest: unsupported query words remain visible as unparsed chips
+ok 49 - unsupported query words remain visible as unparsed chips
+  ---
+  duration_ms: 0.965925
+  type: 'test'
+  ...
+# Subtest: plain-language chips are stable and removable by key
+ok 50 - plain-language chips are stable and removable by key
+  ---
+  duration_ms: 0.647068
+  type: 'test'
+  ...
+# Subtest: deep-link encoding round-trips exact values
+ok 51 - deep-link encoding round-trips exact values
+  ---
+  duration_ms: 1.159771
+  type: 'test'
+  ...
+# Subtest: all supported metric sorts keep unknown values last
+ok 52 - all supported metric sorts keep unknown values last
+  ---
+  duration_ms: 1.865888
+  type: 'test'
+  ...
+# Subtest: pagination remains bounded for 10,000 products
+ok 53 - pagination remains bounded for 10,000 products
+  ---
+  duration_ms: 166.414092
+  type: 'test'
+  ...
+1..53
+# tests 53
+# suites 0
+# pass 53
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 666.483922
+PASS: field-guide Home, integrated Search, tactile navigation, detail action dock, mobile map sheet, core shopping loops, honest data, and reduced motion
