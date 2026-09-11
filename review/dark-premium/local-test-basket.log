@@ -1,0 +1,8 @@
+
+> vegetarian-protein-bible@1.0.0 test:basket
+> REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node basket-action-test.js
+
+PASS basket contract chromium online
+PASS basket contract chromium offline
+PASS basket contract webkit online
+PASS basket contract webkit offline

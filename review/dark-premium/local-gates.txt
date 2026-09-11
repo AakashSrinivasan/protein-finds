@@ -1,0 +1,10 @@
+TARGET=http://127.0.0.1:4187/index.html GATE=test EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=verify EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=test:screen EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=test:basket EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=test:a11y EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=test:copy EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=test:shell EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=test:location EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=test:journey EXIT=0
+TARGET=http://127.0.0.1:4187/index.html GATE=test:pwa EXIT=0
