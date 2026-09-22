@@ -1,4 +1,5 @@
 const products = window.PROTEIN_PRODUCTS;
+const demoMode = new URLSearchParams(location.search).get('demo') === '1';
 const groceryProducts = products.filter(product => product.category !== 'Restaurant');
 const groceryIds = new Set(groceryProducts.map(product => product.id));
 const locationData = window.PROTEIN_LOCATION;
@@ -78,7 +79,7 @@ const productVerdict = product => product.role === 'anchor' ? 'Strong main prote
 const rankingReason = product => `${product.protein}g protein / ${product.calories} cal.`;
 const scoreProduct = product => product.efficiency * 5 + product.protein * 1.5 - (hasKnownPrice(product) ? product.pricePer25 : 0) + (product.role === 'anchor' ? 12 : 0);
 const goalDefinitions = Object.freeze({
-  recommended: { short: 'Best fit', title: 'Balanced shelf', reason: 'Balances protein, calories, value, and usefulness across a grocery trip.' },
+  recommended: { short: 'Best fit', title: 'Recommended products', reason: 'Balances protein, calories, value, and usefulness across a grocery trip.' },
   protein: { short: 'Protein', title: 'Highest protein first', reason: 'Ranks protein grams from highest to lowest.' },
   efficiency: { short: 'Lean', title: 'Most protein per calorie', reason: 'Ranks grams of protein per 100 calories.' },
   price: { short: 'Value', title: 'Lowest recorded cost', reason: 'Ranks known cost per 25g of protein; unknown prices follow.' }
@@ -161,8 +162,7 @@ function showToast(message, action = null) {
 
 function imageMarkup(product, detail = false) {
   if (!product.image) {
-    const initials = product.brand.split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase();
-    return `<div class="image-needed" data-image-needed><span aria-hidden="true">${escapeHtml(initials)}</span><small>Exact package photo unavailable</small></div>`;
+    return `<div class="image-needed" data-image-needed><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8"/></svg><small>Image unavailable</small></div>`;
   }
   const image = product.image;
   return `<img src="${image.path}" alt="Exact package front: ${image.variant}" data-product-image data-upc="${image.upc}" data-image-license="${image.license}" ${detail ? '' : 'loading="lazy"'}>`;
@@ -208,7 +208,7 @@ function stateMarkup(kind) {
     stale: ['◷', 'Some product info is old', 'Details were last checked on August 13. Check the store before buying.', 'Keep browsing']
   };
   const [icon, title, copy, action] = states[kind];
-  if (kind === 'loading') return `<section class="state-card" data-state="loading" role="status"><div class="state-icon">${icon}</div><h2>${title}</h2><p>${copy}</p><div class="loading-lines"><i></i><i></i><i></i></div></section>`;
+  if (kind === 'loading') return `<section class="state-card" data-state="loading" role="status" aria-busy="true"><h2>${title}</h2><p>${copy}</p><div class="catalog-skeleton" aria-hidden="true">${[1, 2].map(() => '<div class="skeleton-product"><span class="skeleton-package"></span><span class="skeleton-copy"><i></i><i></i><i></i></span></div>').join('')}</div></section>`;
   return `<section class="state-card" data-state="${kind}" role="status"><div class="state-icon">${icon}</div><h2>${title}</h2><p>${copy}</p>${action ? `<button class="primary" type="button" data-state-action>${action}</button>` : ''}</section>`;
 }
 
@@ -374,7 +374,7 @@ function featuredCard(product, index, goal) {
   return `<article class="featured-card" data-featured-id="${product.id}" data-product-id="${product.id}">
     <a class="featured-media" href="#product/${product.id}" aria-label="View ${product.name}">${imageMarkup(product)}</a>
     <button class="featured-save" type="button" data-save="${product.id}" aria-label="${state.saved.has(product.id) ? 'Remove' : 'Save'} ${product.name}" aria-pressed="${state.saved.has(product.id)}">${state.saved.has(product.id) ? '♥' : '♡'}</button>
-    <div class="featured-copy"><div class="featured-info"><span>${product.brand}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><p>${product.stores[0] || 'Store unknown'}</p><div class="featured-metrics"><b>${product.protein}g</b><small>protein</small><small>· ${product.calories} cal</small></div><div class="featured-price">${product.exactSku || !hasKnownPrice(product) ? 'Price unknown' : `${money(product.pricePer25)} / 25g protein · sample`}</div></div><div class="featured-actions"><a class="primary" href="#product/${product.id}">View find</a><button type="button" data-add="${product.id}" aria-label="Add ${product.name} to basket" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? '✓' : '+'}</button></div></div>
+    <div class="featured-copy"><div class="featured-info"><span>${product.brand}</span><h2><a href="#product/${product.id}">${product.name}</a></h2><div class="featured-metrics"><b>${product.protein}g <small>protein</small></b><span>${product.calories} calories</span></div><p>${product.stores[0] || 'Store unknown'} · ${product.exactSku?.size || 'Package size unavailable'}</p><div class="featured-price">${hasKnownPrice(product) ? `${money(product.price)} per package · demo` : 'Store price unavailable'}</div></div><div class="featured-actions"><a class="secondary" href="#product/${product.id}">Details</a><button class="primary" type="button" data-add="${product.id}" aria-label="Add ${product.name} to basket" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added' : 'Add'}</button></div></div>
   </article>`;
 }
 
@@ -392,28 +392,28 @@ function renderDiscover() {
   const blockingState = ['loading', 'error', 'empty'].includes(state.dataState);
   const visibleState = ['loading', 'error', 'empty', 'offline', 'stale'].includes(state.dataState) ? stateMarkup(state.dataState) : '';
   app.innerHTML = `<section class="screen discover-screen consumer-home" data-screen="discover">
-    <header class="home-intro"><div><p>The everyday protein edit</p><h1 id="screenTitle">Good finds. Better fuel.</h1></div><a href="#nearby"><b>Foster City · 94404</b><small>Change location</small></a></header>
-    <form class="home-search" id="homeSearchForm"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input name="query" aria-label="Search protein, brands, or stores" placeholder="Find your next favorite…"><button type="submit" aria-label="Search products">→</button></form>
-    <div class="hero-actions home-goals" aria-label="Shopping goal">${[['protein','Most protein'],['efficiency','Leanest'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>
+    <header class="home-intro"><div><h1 id="screenTitle">Shop high-protein groceries</h1><p>${demoMode ? 'Demo catalog with sample prices' : `${groceryProducts.length} verified package listings`}</p></div></header>
+    <div class="home-discovery"><a class="home-location" href="#nearby" aria-label="Change shopping location"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span><small>Shopping near</small><b>Foster City · 94404</b></span></a><form class="home-search" id="homeSearchForm"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input name="query" aria-label="Search products, brands, or stores" placeholder="Search products or brands"><button type="submit">Search</button></form></div>
+    <div class="hero-actions home-goals" aria-label="Sort products">${[['recommended','Recommended'],['protein','Most protein'],['efficiency','Protein per calorie'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>
     ${visibleState}
-    ${!blockingState && featured.length ? `<section class="featured-section home-recommendations"><div class="section-title"><div><h2>Top picks</h2><small>${goal.title}</small></div><a href="#screener">See all</a></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : (!visibleState ? stateMarkup('empty') : '')}
-    <section class="collection-section"><div class="section-title"><h2>A little inspiration</h2><a href="#screener">Explore all →</a></div><div class="collection-grid">${[['Breakfast','The morning edit','Start strong'],['Plant meat','Dinner, reimagined','Plant-powered'],['Snack','Small bites. Big fuel.','Between meals'],['Milk & shakes','Sip something good','On the go']].map(([query,title,kicker])=>`<button type="button" data-collection="${query}"><small>${kicker}</small><b>${title}</b><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>`).join('')}</div></section>
+    ${!blockingState && featured.length ? `<section class="featured-section home-recommendations"><div class="section-title"><div><h2>Products</h2><small>${goal.title}</small></div><a href="#screener">View all</a></div><div class="featured-rail">${featured.map((product, index) => featuredCard(product, index, goal)).join('')}</div></section>` : (!visibleState ? stateMarkup('empty') : '')}
+    ${demoMode ? `<section class="collection-section"><div class="section-title"><h2>Shop by category</h2><a href="#screener">All products</a></div><div class="category-list">${[['Breakfast','Breakfast'],['Plant meat','Plant-based meat'],['Snack','Snacks'],['Milk & shakes','Milk & shakes']].map(([query,label])=>`<button type="button" data-collection="${query}">${label}</button>`).join('')}</div></section>` : ''}
     <a class="home-nearby-row" href="#nearby"><span>Nearby</span><b>Browse ${locationData.STORES.length} Foster City stores</b><i>→</i></a>
     <details class="surface-truth"><summary>About product info</summary><p>Prices and inventory may be out of date. Open a product to see when its source was last checked.</p></details>
   </section>`;
 }
 
 function screenerResultMarkup(product, rank) {
-  const value = productScreener.hasKnownPrice(product) ? money(product.pricePer25) : '—';
+  const value = hasKnownPrice(product) ? money(product.price) : 'Price unavailable';
   const comparing = state.compare.has(product.id);
   const inBasket = state.basket.includes(product.id);
   const store = product.exactSku?.retailerHandoffs?.[0]?.retailer || product.stores?.[0] || 'Store unknown';
   return `<article class="screen-result search-product-card" data-screen-result="${product.id}" data-product-id="${product.id}">
     <a class="search-product-media" href="#product/${escapeHtml(product.id)}" aria-label="View ${escapeHtml(product.name)}">${imageMarkup(product)}</a>
-    <div class="screen-product"><p>${escapeHtml(textLabel(product.brand))}</p><h3><a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a></h3><small>${escapeHtml(productVerdict(product))}</small></div>
+    <div class="screen-product"><p>${escapeHtml(textLabel(product.brand))}</p><h3><a href="#product/${escapeHtml(product.id)}">${escapeHtml(textLabel(product.name))}</a></h3><small>${escapeHtml(product.exactSku?.size || 'Package size unavailable')}</small></div>
     <button class="save-button" type="button" data-save="${escapeHtml(product.id)}" aria-label="${state.saved.has(product.id) ? 'Remove' : 'Save'} ${escapeHtml(product.name)}" aria-pressed="${state.saved.has(product.id)}">${state.saved.has(product.id) ? '♥' : '♡'}</button>
-    <div class="screen-result-metrics"><div class="screen-metric"><b>${numberLabel(product.protein, 'g')}</b><span>Protein</span></div><div class="screen-metric"><b>${numberLabel(product.calories)}</b><span>Calories</span></div><div class="screen-metric"><b>${value}</b><span>per 25g protein</span></div></div>
-    <p class="search-store"><b>${escapeHtml(store)}</b><span>Product info checked ${product.exactSku?.nutritionCheckedAt || 'Aug 13'}</span></p>
+    <div class="screen-result-metrics"><div class="screen-metric protein-metric"><b>${numberLabel(product.protein, 'g')}</b><span>Protein / serving</span></div><div class="screen-metric"><b>${numberLabel(product.calories)}</b><span>Calories</span></div><div class="screen-metric"><b>${value}</b><span>${demoMode ? 'Package price · demo' : 'Store price'}</span></div></div>
+    <p class="search-store"><b>${escapeHtml(store)}</b><span>${hasKnownPrice(product) ? 'Sample price, not live' : 'Check retailer for current price'}</span></p>
     <div class="screen-result-actions">${state.compareMode ? `<button class="compare-select" type="button" data-compare="${escapeHtml(product.id)}" aria-pressed="${comparing}">${comparing ? 'Selected' : 'Compare'}</button>` : ''}<button class="primary" type="button" data-add="${escapeHtml(product.id)}" ${inBasket ? 'disabled' : ''}>${inBasket ? 'Added' : 'Add'}</button></div>
   </article>`;
 }
@@ -523,12 +523,11 @@ function renderScreener() {
   const matchContext = humanClauses.length ? `Matches your ${humanClauses.join(' and ')}` : 'Showing all products';
   const filterSheet = state.filterSheetOpen ? `<div class="filter-sheet-backdrop" data-filter-backdrop><section class="filter-sheet" role="dialog" aria-modal="true" aria-labelledby="filterTitle"><header><span></span><h2 id="filterTitle">Filters</h2><button type="button" data-close-filter aria-label="Close filters">×</button></header><div class="filter-sheet-body"><section class="screen-control-bar"><label><span>Add a filter</span><select id="criterionPicker"><option value="">Choose a filter…</option>${criterionOptions}${facetOptions}</select></label><button class="primary" type="button" data-add-criterion>Add</button><button type="button" data-screen-reset>Clear all</button></section><div class="criterion-stack">${run.screen.criteria.map(criterionEditor).join('')}${run.screen.activeFacets.map(key=>facetEditor(key,run.screen)).join('')}</div><label class="sheet-sort">Sort products<select id="screenSort">${sortOptions}</select></label>${clauses.length ? `<form id="saveScreenForm" class="compact-save-search"><label>Save this search<input name="name" maxlength="40" placeholder="Breakfast picks"></label><button type="submit">Save</button></form>` : ''}</div><footer><button class="primary" type="button" data-close-filter>Show ${run.results.length} products</button></footer></section></div>` : '';
   app.innerHTML = `<section class="screen screener-screen consumer-search" data-screen="screener">
-    <header class="search-title"><h1 id="screenTitle">Find your protein</h1><p>Search products, brands, or what you need.</p></header>
+    <header class="search-title"><h1 id="screenTitle">Search groceries</h1><a href="#nearby"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/></svg>Foster City · 94404</a></header>
     <form class="search-main-form" id="searchAskForm"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="searchAskInput" name="query" value="${escapeHtml(state.askQuery)}" autocomplete="off" placeholder="Try “soy-free snack”">${state.askQuery ? '<button type="button" data-clear-search aria-label="Clear search">×</button>' : '<button type="submit" aria-label="Search">→</button>'}</form>
     <div class="active-screen personal-chips" aria-label="Search filters">${activeChips}</div>
-    <p class="search-match-context">${escapeHtml(matchContext)}</p>
     ${state.savedScreens.length ? `<section class="saved-searches"><span>Saved searches</span><div>${savedScreens}</div></section>` : ''}
-    <div class="search-toolbar"><b><span data-screen-result-count>${run.results.length}</span> results</b><button type="button" data-open-filter><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter</button><button type="button" data-open-sort>Sort</button><button type="button" data-compare-mode aria-pressed="${state.compareMode}" aria-label="${state.compareMode ? 'Exit' : 'Enter'} compare mode"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3v18M16 3v18M3 8h5M16 16h5"/></svg></button><button type="button" data-density="${run.screen.density === 'grid' ? 'list' : 'grid'}" aria-label="Switch to ${run.screen.density === 'grid' ? 'list' : 'grid'} view"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button></div>
+    <div class="search-toolbar"><b>${escapeHtml(matchContext)} · <span data-screen-result-count>${run.results.length}</span></b><button type="button" data-open-filter><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter & sort</button><button type="button" data-compare-mode aria-pressed="${state.compareMode}">${state.compareMode ? 'Done comparing' : 'Compare'}</button></div>
     <section class="screen-output" aria-live="polite"><div class="screen-results" data-density="${run.screen.density}">${resultMarkup||`<div class="empty-card screen-empty"><h2>No matches</h2><p>Try removing a filter or searching for something broader.</p><button class="primary" type="button" data-screen-reset>Clear filters</button></div>`}</div>${pageControls}</section>
     <details class="surface-truth screen-truth"><summary>About these results</summary><p>Product details come from a limited catalog. Price and store availability may be out of date.</p></details>
     ${compareTrayMarkup()}
@@ -1032,9 +1031,11 @@ window.addEventListener('online', () => { state.dataState = 'ready'; if (current
 window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); deferredInstallPrompt = event; document.querySelector('#installButton').textContent = 'Install app'; });
 window.addEventListener('appinstalled', () => { deferredInstallPrompt = null; document.querySelector('#installButton').textContent = 'Installed'; document.querySelector('#installButton').disabled = true; });
 document.querySelector('#installButton').addEventListener('click', async () => {
-  if (deferredInstallPrompt) { deferredInstallPrompt.prompt(); await deferredInstallPrompt.userChoice; deferredInstallPrompt = null; return; }
+  const menu = document.querySelector('.header-menu');
+  if (deferredInstallPrompt) { deferredInstallPrompt.prompt(); await deferredInstallPrompt.userChoice; deferredInstallPrompt = null; if (menu) menu.open = false; return; }
   liveRegion.textContent = 'On iPhone Safari, use Share then Add to Home Screen. On Android Chrome, choose Install app.';
   document.querySelector('#installButton').textContent = 'Share → Add';
+  if (menu) menu.open = false;
 });
 
 if (!location.hash) history.replaceState(null, '', `${location.pathname}${location.search}#discover`);

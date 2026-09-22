@@ -25,7 +25,7 @@ const url = process.env.REVIEW_URL || 'http://127.0.0.1:4173/index.html';
   assert.equal(await page.locator('.discover-hero').count(), 0, 'legacy marketing hero is removed');
   assert.equal(await page.locator('.catalog-title').count(), 0, 'Home no longer duplicates a full catalog shelf');
   assert.equal(await page.locator('.home-search').isVisible(), true, 'dominant search is in the first screen');
-  assert.equal(await page.locator('.home-intro a[href="#nearby"]').isVisible(), true, 'location context is immediately actionable');
+  assert.equal(await page.locator('.home-location[href="#nearby"]').isVisible(), true, 'location context is immediately actionable beside search');
   assert.equal(await page.locator('[data-featured-id]').count(), 5, 'Home exposes an image-led recommendation rail');
   assert.equal(await page.locator('[data-featured-id] .featured-actions .primary').count(), 5, 'each recommendation has one primary detail action');
   assert.equal(await page.locator('[data-featured-id] [data-add]').count(), 5, 'each recommendation has one quick-add action');

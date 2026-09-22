@@ -64,7 +64,7 @@ async function exercise(engineName, browserType) {
   await page.evaluate(() => window.ProteinFinds.setDataState('ready'));
 
   await route(page, '#screener', `${engineName}/search-default`);
-  assert.equal(await page.locator('.search-match-context').innerText(), 'Showing all products');
+  assert.match(await page.locator('.search-toolbar').innerText(), /^Showing all products/);
   assert.equal(await page.locator('.search-product-card').first().locator('text=Why it matched').count(), 0, 'no no-filter rationale row');
 
   await page.locator('[data-open-filter]').click();
@@ -75,8 +75,8 @@ async function exercise(engineName, browserType) {
   await page.locator('[data-criterion-number="min"][data-key="protein"]').press('Tab');
   await page.locator('[data-close-filter]').last().click();
   await assertClean(page, `${engineName}/search-active-filter`);
-  assert.match(await page.locator('.search-match-context').innerText(), /^Matches your 20g\+ protein/);
-  assert.match(await page.locator('.screen-metric').nth(2).innerText(), /(?:\$\d+(?:\.\d+)?|—)\s*per 25g protein/i);
+  assert.match(await page.locator('.search-toolbar').innerText(), /^Matches your 20g\+ protein/);
+  assert.match(await page.locator('.screen-metric').nth(2).innerText(), /(?:\$\d+(?:\.\d+)?|Price unavailable)\s*(?:Package price · demo|Store price)/i);
 
   await page.locator('[data-open-filter]').click();
   await page.locator('[data-criterion-number="min"][data-key="protein"]').fill('999');

@@ -38,12 +38,12 @@ self.addEventListener('fetch', event => {
 
 function extractLegacyRelease(destination) {
   const archive = path.join(destination, 'legacy.tar');
-  const result = childProcess.spawnSync('git', ['archive', '--format=tar', '-o', archive, '737a67e6bcb8e0a4eb4be64b591b0135950c0445'], {
+  const result = childProcess.spawnSync('git', ['archive', '--format=tar', '-o', archive, '032acc0812d6845acc113dda7269950395af0328'], {
     cwd: __dirname,
     encoding: 'utf8'
   });
   if (result.status !== 0) {
-    throw new Error('The actual preceding v21 release is required for this release upgrade gate');
+    throw new Error('The actual preceding v22 release is required for this release upgrade gate');
   }
   fs.mkdirSync(path.join(destination, 'legacy'), { recursive: true });
   const extract = childProcess.spawnSync('tar', ['-xf', archive, '-C', path.join(destination, 'legacy')], { encoding: 'utf8' });
@@ -90,8 +90,8 @@ function extractLegacyRelease(destination) {
     await legacyPage.waitForSelector('[data-product-id]');
     await legacyPage.evaluate(() => navigator.serviceWorker.ready);
     await legacyPage.reload({ waitUntil: 'domcontentloaded' });
-    assert.equal(await legacyPage.locator('link[href*="dark-premium"]').count(), 1, 'actual prior release is the rejected dark redesign');
-    assert.ok(await legacyPage.evaluate(async () => (await caches.keys()).includes('protein-finds-shell-v21')), 'returning profile contains the actual prior v21 shell cache');
+    assert.equal(await legacyPage.locator('.collection-grid').count(), 1, 'actual prior release has the pastel category tile grid');
+    assert.ok(await legacyPage.evaluate(async () => (await caches.keys()).includes('protein-finds-shell-v22')), 'returning profile contains the actual prior v22 shell cache');
     await legacyPage.close();
 
     activeRoot = __dirname;
@@ -99,7 +99,7 @@ function extractLegacyRelease(destination) {
     const errors = [];
     returningPage.on('console', message => message.type() === 'error' && errors.push(message.text()));
     returningPage.on('pageerror', error => errors.push(error.message));
-    await returningPage.goto(`${origin}/index.html#discover`, { waitUntil: 'domcontentloaded' });
+    await returningPage.goto(`${origin}/index.html?demo=1#discover`, { waitUntil: 'domcontentloaded' });
     await returningPage.waitForSelector('[data-tab="screener"]');
 
     assert.deepEqual(
@@ -108,8 +108,8 @@ function extractLegacyRelease(destination) {
       'first post-deploy visit upgrades the returning profile to the five-tab shell'
     );
     const criticalAssets = await returningPage.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name));
-    for (const asset of ['app-shell.css', 'data.js', 'product-screener.js', 'location-data.js', 'ask-protein.js', 'app.js']) {
-      const expectedVersion = 22;
+    for (const asset of ['app-shell.css', 'design-standards.css', 'data.js', 'product-screener.js', 'location-data.js', 'ask-protein.js', 'app.js']) {
+      const expectedVersion = 24;
       assert.ok(criticalAssets.some(url => url.includes(`/${asset}?v=${expectedVersion}`)), `${asset} loads through its v${expectedVersion} cache-miss URL`);
     }
 
@@ -139,9 +139,10 @@ function extractLegacyRelease(destination) {
     assert.equal(await returningPage.inputValue('[data-criterion-number="min"][data-key="protein"]'), '10', 'Screener state survives the first upgraded visit');
     assert.deepEqual(errors, [], 'returning-client upgrade has zero console or page errors');
 
-    await returningPage.waitForFunction(async () => (await caches.keys()).includes('protein-finds-shell-v22'));
-    assert.equal(await returningPage.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(248, 246, 241)', 'first returning navigation renders the editorial release');
-    console.log('PASS: actual cached v21 profile upgrades to v22 on its first post-deploy visit via versioned new assets and preserves Search state/scroll');
+    await returningPage.waitForFunction(async () => (await caches.keys()).includes('protein-finds-shell-v24'));
+    assert.equal(await returningPage.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(245, 243, 237)', 'first returning navigation renders the product-first release');
+    assert.equal(await returningPage.locator('link[href="design-standards.css?v=24"]').count(), 1);
+    console.log('PASS: actual cached v22 profile upgrades to v24 on its first post-deploy visit via versioned new assets and preserves Search state/scroll');
   } finally {
     await context.close();
     await new Promise(resolve => server.close(resolve));
