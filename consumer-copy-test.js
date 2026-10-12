@@ -76,7 +76,7 @@ async function exercise(engineName, browserType) {
   await page.locator('[data-close-filter]').last().click();
   await assertClean(page, `${engineName}/search-active-filter`);
   assert.match(await page.locator('.search-toolbar').innerText(), /^Matches your 20g\+ protein/);
-  assert.match(await page.locator('.screen-metric').nth(2).innerText(), /(?:\$\d+(?:\.\d+)?|Price unavailable)\s*(?:Package price · demo|Store price)/i);
+  assert.match(await page.locator('.screen-metric').nth(2).innerText(), /^Unknown\s*Store price$/i, 'consumer catalog discloses unverified store prices instead of rendering demo prices');
 
   await page.locator('[data-open-filter]').click();
   await page.locator('[data-criterion-number="min"][data-key="protein"]').fill('999');

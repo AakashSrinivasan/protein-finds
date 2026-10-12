@@ -38,15 +38,15 @@ async function exerciseJourney(browserType) {
   assert.match(evaluation, /21g protein/i);
   assert.match(evaluation, /170 calories/i);
   assert.match(evaluation, /vegan/i);
-  assert.match(evaluation, /soy-free/i);
+  assert.match(evaluation, /Allergen-free claims are not verified/i);
   assert.match(evaluation, /wheat/i);
   assert.match(evaluation, /ingredients/i);
   assert.match(await page.locator('.detail-decision').textContent(), /Price unknown/i);
   assert.doesNotMatch(await page.locator('[data-screen="product"]').textContent(), /\$7\.99 demo pack/i);
 
   const exactHandoff = page.locator('[data-retailer-connection="exact-product"]');
-  assert.match(await exactHandoff.textContent(), /Check Safeway on Instacart/i);
-  assert.match(await exactHandoff.textContent(), /Price and stock may have changed/i);
+  assert.match(await exactHandoff.textContent(), /View at Safeway on Instacart/i);
+  assert.match(await exactHandoff.textContent(), /Price and stock unknown/i);
   assert.match(await exactHandoff.textContent(), /Check stock/i);
   const exactUrl = await exactHandoff.locator('[data-retailer-handoff="exact-product"]').getAttribute('href');
   assert.match(exactUrl, /^https:\/\/www\.instacart\.com\/products\/27918479-/);
@@ -58,8 +58,8 @@ async function exerciseJourney(browserType) {
   assert.match(nearbyText, /2220 Bridgepointe Pkwy/i);
   assert.match(nearbyText, /mi away/i);
   assert.match(nearbyText, /Check stock/i);
-  assert.match(nearbyText, /Search Target/i);
-  assert.equal(await nearby.locator('[data-retailer-handoff="retailer-search"]').getAttribute('href'), 'https://www.target.com/s?searchTerm=0810057290831');
+  assert.match(nearbyText, /Retailer link not verified/i);
+  assert.equal(await nearby.locator('[data-retailer-handoff]').count(), 0, 'an inconclusive Target check cannot leave an actionable shopping link');
   assert.match(await nearby.locator('[data-directions]').getAttribute('href'), /^https:\/\/www\.openstreetmap\.org\/directions/);
 
   await nearby.locator('[data-report-sighting]').click();

@@ -1,5 +1,5 @@
-const products = window.PROTEIN_PRODUCTS;
 const demoMode = new URLSearchParams(location.search).get('demo') === '1';
+const products = window.PROTEIN_PRODUCTS.filter(product => demoMode || product.catalogStatus === 'documented-package').map(product => demoMode ? ProteinEvidence.safeFlags(product) : ProteinEvidence.consumerProduct(product));
 const groceryProducts = products.filter(product => product.category !== 'Restaurant');
 const groceryIds = new Set(groceryProducts.map(product => product.id));
 const locationData = window.PROTEIN_LOCATION;
@@ -17,7 +17,8 @@ function readJson(storage, key, fallback) {
   catch { return fallback; }
 }
 
-const stored = readJson(localStorage, storageKey, {});
+const storedRaw = readJson(localStorage, storageKey, {});
+const stored = storedRaw && typeof storedRaw === 'object' && !Array.isArray(storedRaw) ? storedRaw : {};
 const categoryFilters = {
   'All groceries': null,
   'Main proteins': ['Plant meat', 'Egg'],
@@ -35,9 +36,9 @@ const storedSightings = Object.fromEntries(Object.entries(stored.sightings || {}
   /^[a-z0-9-]+:[a-z0-9-]+$/.test(key) && report?.status === 'pending-local' && typeof report.reportedAt === 'string'
 ));
 const state = {
-  saved: new Set((stored.saved || []).filter(id => groceryIds.has(id))),
-  basket: (stored.basket || []).filter(id => groceryIds.has(id)),
-  compare: new Set((stored.compare || []).filter(id => groceryIds.has(id)).slice(0, 3)),
+  saved: new Set((Array.isArray(stored.saved) ? stored.saved : []).filter(id => groceryIds.has(id))),
+  basket: [...new Set((Array.isArray(stored.basket) ? stored.basket : []).filter(id => typeof id === 'string' && id.trim()))],
+  compare: new Set((Array.isArray(stored.compare) ? stored.compare : []).filter(id => groceryIds.has(id)).slice(0, 3)),
   search: stored.search || '',
   category: Object.hasOwn(categoryFilters, storedCategory) ? storedCategory : 'All groceries',
   sort: stored.sort || 'recommended',
@@ -281,7 +282,7 @@ function storeCard(store, index) {
 function mapMarkup(stores) {
   const selectedIndex = stores.findIndex(store => store.id === state.selectedStore);
   return `<div class="map-wrap">
-    <div class="map-status"><span>OpenStreetMap</span><b>${state.mapMoved ? 'Map moved · results unchanged' : 'Map and list synchronized'}</b></div>
+    <div class="map-status"><span>OpenStreetMap</span><b>${state.mapMoved ? 'Search this area to update stores' : 'Map and list synchronized'}</b></div>
     <div class="store-map" id="storeMap" data-store-map aria-label="Interactive geographic map of ${stores.length} grocery stores"></div>
     <button class="map-recenter" type="button" data-map-recenter aria-label="Recenter map on ${state.location ? state.location.label : 'Foster City'}">◎</button>
     <button class="primary search-here" type="button" data-search-here ${state.mapMoved ? '' : 'disabled'}>Search this area</button>
@@ -344,7 +345,7 @@ function initializeNearbyMap(stores) {
       state.mapMoved = true;
       document.querySelector('[data-search-here]')?.removeAttribute('disabled');
       const status = document.querySelector('.map-status b');
-      if (status) status.textContent = 'Map moved · results unchanged';
+      if (status) status.textContent = 'Search this area to update stores';
     });
   });
 }
@@ -392,7 +393,7 @@ function renderDiscover() {
   const blockingState = ['loading', 'error', 'empty'].includes(state.dataState);
   const visibleState = ['loading', 'error', 'empty', 'offline', 'stale'].includes(state.dataState) ? stateMarkup(state.dataState) : '';
   app.innerHTML = `<section class="screen discover-screen consumer-home" data-screen="discover">
-    <header class="home-intro"><div><h1 id="screenTitle">Shop high-protein groceries</h1><p>${demoMode ? 'Demo catalog with sample prices' : `${groceryProducts.length} verified package listings`}</p></div></header>
+    <header class="home-intro"><div><h1 id="screenTitle">Shop high-protein groceries</h1><p>${demoMode ? 'Demo catalog with sample prices' : `${groceryProducts.length} documented products · price & stock unknown`}</p></div></header>
     <div class="home-discovery"><a class="home-location" href="#nearby" aria-label="Change shopping location"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span><small>Shopping near</small><b>Foster City · 94404</b></span></a><form class="home-search" id="homeSearchForm"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input name="query" aria-label="Search products, brands, or stores" placeholder="Search products or brands"><button type="submit">Search</button></form></div>
     <div class="hero-actions home-goals" aria-label="Sort products">${[['recommended','Recommended'],['protein','Most protein'],['efficiency','Protein per calorie'],['price','Best value']].map(([value,label]) => `<button type="button" data-quick-sort="${value}" aria-pressed="${state.sort === value}">${label}</button>`).join('')}</div>
     ${visibleState}
@@ -404,7 +405,7 @@ function renderDiscover() {
 }
 
 function screenerResultMarkup(product, rank) {
-  const value = hasKnownPrice(product) ? money(product.price) : 'Price unavailable';
+  const value = hasKnownPrice(product) ? money(product.price) : 'Unknown';
   const comparing = state.compare.has(product.id);
   const inBasket = state.basket.includes(product.id);
   const store = product.exactSku?.retailerHandoffs?.[0]?.retailer || product.stores?.[0] || 'Store unknown';
@@ -528,8 +529,8 @@ function renderScreener() {
     <div class="active-screen personal-chips" aria-label="Search filters">${activeChips}</div>
     ${state.savedScreens.length ? `<section class="saved-searches"><span>Saved searches</span><div>${savedScreens}</div></section>` : ''}
     <div class="search-toolbar"><b>${escapeHtml(matchContext)} · <span data-screen-result-count>${run.results.length}</span></b><button type="button" data-open-filter><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filter & sort</button><button type="button" data-compare-mode aria-pressed="${state.compareMode}">${state.compareMode ? 'Done comparing' : 'Compare'}</button></div>
-    <section class="screen-output" aria-live="polite"><div class="screen-results" data-density="${run.screen.density}">${resultMarkup||`<div class="empty-card screen-empty"><h2>No matches</h2><p>Try removing a filter or searching for something broader.</p><button class="primary" type="button" data-screen-reset>Clear filters</button></div>`}</div>${pageControls}</section>
-    <details class="surface-truth screen-truth"><summary>About these results</summary><p>Product details come from a limited catalog. Price and store availability may be out of date.</p></details>
+    <section class="screen-output" aria-live="polite"><div class="screen-results" data-density="${run.screen.density}">${resultMarkup||`<div class="empty-card screen-empty"><h2>No matches</h2><p>${run.screen.allergens.length ? 'Allergen info not verified. Only reviewed allergen-free evidence can pass an exclusion filter.' : 'Try removing a filter or searching for something broader.'}</p><button class="primary" type="button" data-screen-reset>Clear filters</button></div>`}</div>${pageControls}</section>
+    <details class="surface-truth screen-truth"><summary>About these results</summary><p>Nutrition is historically recorded, not a reverified current panel. Price and store stock are unknown. Allergen exclusions require reviewed evidence.</p></details>
     ${compareTrayMarkup()}
     ${filterSheet}
   </section>`;
@@ -576,9 +577,9 @@ function productEvidenceMarkup(product) {
   if (!sku) return '';
   return `<details class="product-evidence" data-product-evidence><summary>Nutrition and ingredients</summary>
     <h2>${product.protein}g protein · ${product.calories} calories · ${product.efficiency}g / 100 cal</h2>
-    <div class="evidence-tags">${sku.dietaryLabels.map(label => `<span>${escapeHtml(label)}</span>`).join('')}<span>Contains ${escapeHtml(sku.allergens.join(', '))}</span></div>
-    <p><b>Ingredients:</b> ${escapeHtml(product.ingredients)}</p>
-    <p class="evidence-source">Checked ${escapeHtml(sku.nutritionCheckedAt)}. <a href="${escapeHtml(sku.nutritionSourceUrl)}" target="_blank" rel="noopener">View manufacturer page ↗</a></p>
+    <div class="evidence-tags">${sku.dietaryLabels.filter(label => !/-free/i.test(label)).map(label => `<span>${escapeHtml(label)} · recorded label</span>`).join('')}<span>Recorded warnings: ${escapeHtml(sku.allergens.join(', '))}</span></div>
+    <p><b>Ingredients:</b> ${product.ingredients ? escapeHtml(product.ingredients) : 'Ingredients not verified for this exact package.'}</p>
+    <p class="evidence-source">${demoMode ? 'Demo nutrition' : 'Historical recorded nutrition, not a reverified current panel'}. Recorded ${escapeHtml(product.verified)}. Allergen-free claims are not verified; exclusion filters require reviewed evidence. <a href="${escapeHtml(sku.nutritionSourceUrl)}" target="_blank" rel="noopener">View recorded source ↗</a></p>
   </details>`;
 }
 
@@ -595,8 +596,8 @@ function productStoreMarkup(product) {
     const report = key ? state.sightings[key] : null;
     return `<section class="product-store-panel" ${store ? `data-product-store="${escapeHtml(store.id)}"` : ''} data-retailer-connection="${escapeHtml(handoff.type)}">
       <div class="product-store-head"><div><p class="eyebrow">Where to find it</p><h2>${escapeHtml(store ? `${store.name} · ${store.distanceMiles.toFixed(1)} mi away` : handoff.retailer)}</h2>${store ? `<p>${escapeHtml(store.address)}</p>` : ''}</div><span data-availability="unknown">Check stock</span></div>
-      <p class="store-observation">Price and stock may have changed. Last checked ${escapeHtml(handoff.checkedAt)}.</p>
-      <div class="product-store-actions">${store ? `<a class="secondary" data-directions href="${escapeHtml(store.directionsUrl)}" target="_blank" rel="noopener">Directions ↗</a>` : ''}<a class="primary" data-retailer-handoff="${escapeHtml(handoff.type)}" href="${escapeHtml(handoff.url)}" target="_blank" rel="noopener">${escapeHtml(handoff.label)} ↗</a></div>
+      <p class="store-observation">Price and stock unknown. Product link checked ${escapeHtml(handoff.checkedAt)}; no current local price or inventory observation.</p>
+      <div class="product-store-actions">${store ? `<a class="secondary" data-directions href="${escapeHtml(store.directionsUrl)}" target="_blank" rel="noopener">Directions ↗</a>` : ''}${handoff.enabled === false ? '<p class="retailer-link-status" data-link-unverified>Retailer link not verified. No working local shopping link is available here.</p>' : `<a class="primary" data-retailer-handoff="${escapeHtml(handoff.type)}" href="${escapeHtml(handoff.url)}" target="_blank" rel="noopener">${escapeHtml(handoff.label)} ↗</a>`}</div>
       ${store ? `<div class="sighting-box"><button class="secondary" type="button" data-report-sighting="${escapeHtml(key)}" aria-pressed="${Boolean(report)}">${report ? '✓ Report saved' : 'I found this here'}</button><p data-sighting-status>${report ? 'Pending report stored only on this device. It is unverified and does not confirm inventory.' : 'Your report will stay only on this device as pending-local. It will not confirm inventory.'}</p></div>` : ''}
     </section>`;
   }).join('');
@@ -621,7 +622,7 @@ function renderProduct(id) {
         ${product.exactSku ? `<div class="detail-decision"><span><b>Price unknown</b><small>No store price observation attached</small></span><span><b>${escapeHtml(product.exactSku.retailerHandoffs?.find(handoff => handoff.type === 'exact-product')?.retailer || product.exactSku.retailerHandoffs?.[0]?.retailer || 'Store unknown')}</b><small>Unknown inventory · checked ${escapeHtml(product.exactSku.retailerHandoffs?.find(handoff => handoff.type === 'exact-product')?.checkedAt || product.exactSku.nutritionCheckedAt)}</small></span></div>` : `<div class="detail-decision"><span><b>${priceLabel(product)}</b><small>not a live price</small></span><span><b>${product.stores[0] || 'Store unknown'}</b><small>${product.availabilityLabel} · checked Aug 13</small></span></div>`}
         <p class="detail-blurb">${product.blurb}</p><div class="detail-notes"><p><b>Best for</b><span>${product.use}</span></p><p><b>Keep in mind</b><span>${product.tradeoff}</span></p></div>
         ${productEvidenceMarkup(product)}
-        <div class="truth-note"><b>${product.exactSku ? 'Verified package.' : 'Sample product info.'}</b> ${product.exactSku ? 'The package matches the listed UPC. Check the store for current price and stock.' : 'Nutrition, price, and availability may have changed.'}</div>
+        <div class="truth-note"><b>${product.exactSku ? 'Documented package.' : 'Sample product info.'}</b> ${product.exactSku ? 'Package identity and image documentation do not verify nutrition, allergen freedom, store price or stock. Check the physical label and retailer.' : 'Nutrition, price, and availability may have changed.'}</div>
         ${productStoreMarkup(product)}
         <div class="detail-actions"><button class="secondary" type="button" data-save="${product.id}" aria-pressed="${saved}">${saved ? '♥ Saved' : '♡ Save'}</button><button class="secondary" type="button" data-compare="${product.id}" aria-pressed="${state.compare.has(product.id)}">${state.compare.has(product.id) ? '✓ Compare' : 'Compare'}</button><button class="primary detail-primary-action" type="button" data-add="${product.id}" ${state.basket.includes(product.id) ? 'disabled' : ''}>${state.basket.includes(product.id) ? 'Added' : 'Add to basket'}</button></div><a class="source-link" target="_blank" rel="noopener" href="${product.source}">View product source ↗</a>
         ${imageCredit}
@@ -653,7 +654,7 @@ function comparisonDecision(items, sort = 'recommended') {
     protein: product => `${numberLabel(product.protein, 'g')} protein is the highest known value shown.`,
     calories: product => `${numberLabel(product.calories)} calories is the lowest known value shown.`,
     efficiency: product => `${numberLabel(product.efficiency)}g protein per 100 calories is the highest known value shown.`,
-    price: product => `${money(product.pricePer25)} per 25g protein is the lowest known value shown.`,
+    price: product => `${money(product.price)} per package is the lowest known package price shown.`,
     name: product => `${textLabel(product.name)} appears first under the active product-name sort.`
   };
   const activeCriterion = sortedWinner && criterionLabels[sort] ? { product: sortedWinner, label: criterionLabels[sort], proof: proof[sort] } : null;
@@ -693,10 +694,15 @@ function renderCompare() {
 
 function renderBasket() {
   const items = state.basket.map(byId).filter(Boolean);
+  const missingIds = state.basket.filter(id => !byId(id));
+  const missingMarkup = missingIds.map(id => {
+    const previous = window.PROTEIN_PRODUCTS.find(product => product.id === id);
+    return `<div class="basket-line" data-retained-basket="${escapeHtml(id)}"><div><b>${escapeHtml(previous?.name || id)}</b><small>No longer in the documented catalog · price and stock unknown. Your saved entry is preserved.</small></div><button type="button" data-remove="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(previous?.name || id)}">Remove</button></div>`;
+  }).join('');
   const totalProtein = items.reduce((sum, product) => sum + product.protein, 0);
   const knownPriceItems = items.filter(hasKnownPrice);
-  const totalCost = knownPriceItems.reduce((sum, product) => sum + product.price / product.servings, 0);
-  const unknownPriceCount = items.length - knownPriceItems.length;
+  const totalCost = knownPriceItems.reduce((sum, product) => sum + product.price, 0);
+  const unknownPriceCount = state.basket.length - knownPriceItems.length;
   const groups = Object.groupBy ? Object.groupBy(items, product => product.stores[0] || 'Source') : items.reduce((result, product) => { const key = product.stores[0] || 'Source'; (result[key] ||= []).push(product); return result; }, {});
   const tripCategories = [
     {label: 'a main protein', categories: ['Plant meat', 'Egg']},
@@ -708,10 +714,10 @@ function renderBasket() {
   const prompts = `<aside class="missing-categories" data-missing-categories><b>${missing.length ? 'Round out the trip' : 'Core trip categories covered'}</b><p>Trip ideas, not nutrition requirements. ${missing.length ? `You may still want ${missing.map(group => group.label).join(', ')}.` : 'This demo basket includes a main, breakfast, dairy or drink, and snack.'}</p></aside>`;
   const storeGroups = Object.entries(groups).map(([store, storeItems]) => {
     const categories = storeItems.reduce((result, product) => { (result[product.category] ||= []).push(product); return result; }, {});
-    return `<section class="basket-store"><h2>${store}</h2>${Object.entries(categories).map(([category, categoryItems]) => `<div class="basket-category"><h3>${category}</h3>${categoryItems.map(product => `<div class="basket-line"><div><a href="#product/${product.id}"><b>${product.name}</b></a><small>${product.protein}g · ${hasKnownPrice(product) ? `about ${money(product.price / product.servings)} per serving` : 'price unknown'}</small></div><button type="button" data-remove="${product.id}" aria-label="Remove ${product.name}">Remove</button></div>`).join('')}</div>`).join('')}</section>`;
+    return `<section class="basket-store"><h2>${store}</h2>${Object.entries(categories).map(([category, categoryItems]) => `<div class="basket-category"><h3>${category}</h3>${categoryItems.map(product => `<div class="basket-line"><div><a href="#product/${product.id}"><b>${product.name}</b></a><small>${product.protein}g recorded / serving · ${hasKnownPrice(product) ? `${money(product.price)} sample / package` : 'price unknown'} · stock unknown</small></div><button type="button" data-remove="${product.id}" aria-label="Remove ${product.name}">Remove</button></div>`).join('')}</div>`).join('')}</section>`;
   }).join('');
-  const subtotal = unknownPriceCount ? `${money(totalCost)} known + ${unknownPriceCount} unknown` : money(totalCost);
-  app.innerHTML = `<section class="screen" data-screen="basket">${screenHead('Your shopping plan', 'Grocery basket', 'Products grouped by store. Check current prices and stock before you go.')}${items.length ? `<div class="basket-progress"><b>${items.length} products across ${Object.keys(groups).length} ${Object.keys(groups).length === 1 ? 'store' : 'stores'}</b><span>Use this as your store plan; Protein Finds does not submit an order.</span></div>${storeGroups}${prompts}<div class="basket-total"><span>Estimated one-serving total</span><br><b>${totalProtein}g · ${subtotal}</b><p>Unknown prices are kept separate. No order or payment is submitted.</p></div><div class="basket-next"><div><b>Keep building this trip</b><span>Add another category or search for what is missing.</span></div><a class="primary" href="#discover">Continue shopping</a><a class="secondary" href="#screener">Search products</a></div>` : `<div class="empty-card"><span class="state-icon">▣</span><h2>Your basket is empty</h2><p>Add grocery products from Home or Search. Your trip stays on this device.</p><a class="primary" href="#screener">Find products</a></div>`}</section>`;
+  const subtotal = knownPriceItems.length ? `${money(totalCost)} ${demoMode ? 'sample subtotal' : 'partial subtotal'} · ${knownPriceItems.length} of ${state.basket.length} products priced` : `Total unknown · 0 of ${state.basket.length} products priced`;
+  app.innerHTML = `<section class="screen" data-screen="basket">${screenHead('Your shopping plan', 'Grocery basket', 'Products grouped by store. Check current prices and stock before you go.')}${state.basket.length ? `<div class="basket-progress"><b>${state.basket.length} products across ${Object.keys(groups).length} ${Object.keys(groups).length === 1 ? 'store' : 'stores'}</b><span>Use this as your store plan; Protein Finds does not submit an order.</span></div>${missingMarkup}${storeGroups}${prompts}<div class="basket-total"><span>${demoMode ? 'Sample package-price subtotal' : 'Package-price total'}</span><br><b>${subtotal}</b><p>${totalProtein}g recorded protein across one serving of each documented product. Unknown prices are kept separate. No order or payment is submitted.</p></div><div class="basket-next"><div><b>Keep building this trip</b><span>Add another category or search for what is missing.</span></div><a class="primary" href="#discover">Continue shopping</a><a class="secondary" href="#screener">Search products</a></div>` : `<div class="empty-card"><span class="state-icon">▣</span><h2>Your basket is empty</h2><p>Add grocery products from Home or Search. Your trip stays on this device.</p><a class="primary" href="#screener">Find products</a></div>`}</section>`;
 }
 
 function render() {

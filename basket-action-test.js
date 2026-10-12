@@ -8,7 +8,8 @@ async function run(engine,offline){
   const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:webkitOffline?'block':'allow'});
   const page=await context.newPage();const errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>m.type()==='error'&&errors.push(m.text()));
-  await page.goto(`${base}?basket-contract=${engine.name()}-${offline?'offline':'online'}#screener`,{waitUntil:'domcontentloaded'});
+  const target = new URL(base); target.searchParams.set('basket-contract', `${engine.name()}-${offline?'offline':'online'}`); target.hash = 'screener';
+  await page.goto(target.href,{waitUntil:'domcontentloaded'});
   await page.evaluate(()=>{localStorage.clear();sessionStorage.clear()});await page.reload({waitUntil:'domcontentloaded'});
   if(offline){if(!webkitOffline)await page.evaluate(async()=>{if('serviceWorker'in navigator)await navigator.serviceWorker.ready});await context.setOffline(true)}
   await page.fill('#searchAskInput','best protein cereal');await page.click('#searchAskForm button[type="submit"]');

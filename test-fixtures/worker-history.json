@@ -1,0 +1,186 @@
+[
+  {
+    "deploymentId": 6584451490,
+    "sha": "50b87d4e096803a600949cddc3e61d84a3459fcb",
+    "createdAt": "2026-09-22T06:04:01Z",
+    "success": true,
+    "cache": "protein-finds-shell-v24",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6584387799,
+    "sha": "d109c658eb147bcb2be923365576fd855e812f97",
+    "createdAt": "2026-09-22T05:58:47Z",
+    "success": true,
+    "cache": "protein-finds-shell-v24",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6583754161,
+    "sha": "e3660970b0149e0d9b1619578d3190d23d35b8bf",
+    "createdAt": "2026-09-22T05:01:28Z",
+    "success": true,
+    "cache": "protein-finds-shell-v24",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6400336492,
+    "sha": "032acc0812d6845acc113dda7269950395af0328",
+    "createdAt": "2026-09-11T19:32:42Z",
+    "success": true,
+    "cache": "protein-finds-shell-v22",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6399393372,
+    "sha": "737a67e6bcb8e0a4eb4be64b591b0135950c0445",
+    "createdAt": "2026-09-11T18:32:46Z",
+    "success": true,
+    "cache": "protein-finds-shell-v21",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6272195768,
+    "sha": "8832203cf81417fe566ae5390ffe0c63bbb32cb8",
+    "createdAt": "2026-09-04T20:22:50Z",
+    "success": true,
+    "cache": "protein-finds-shell-v20",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6257691954,
+    "sha": "91c8fd01e9b4952770260cf3d7f1dcf8e0bb1ae4",
+    "createdAt": "2026-09-04T04:09:49Z",
+    "success": true,
+    "cache": "protein-finds-shell-v18",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6094119048,
+    "sha": "b958c86ad2411edeeaf1346bc6cc50e2cc65ba7a",
+    "createdAt": "2026-08-25T23:37:23Z",
+    "success": true,
+    "cache": "protein-finds-shell-v12",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6093500258,
+    "sha": "ebfdc933499c0d26286af36f4bafd5fd2bc893ae",
+    "createdAt": "2026-08-25T22:44:13Z",
+    "success": true,
+    "cache": "protein-finds-shell-v11",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6076169922,
+    "sha": "b2ebbf8e63fc9fb213889f7e829a545198b3cd88",
+    "createdAt": "2026-08-25T03:59:35Z",
+    "success": true,
+    "cache": "protein-finds-shell-v10",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6073992114,
+    "sha": "0259b9f8da9a35c6b82478dda168aa560cfc53b1",
+    "createdAt": "2026-08-25T00:25:59Z",
+    "success": true,
+    "cache": "protein-finds-shell-v7",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6072537316,
+    "sha": "a67bb933fea4143163dea3559efee7445752f887",
+    "createdAt": "2026-08-24T22:21:46Z",
+    "success": true,
+    "cache": "protein-finds-shell-v6",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6069659625,
+    "sha": "63283e90a2aaf8db919fca72761e8639eb330815",
+    "createdAt": "2026-08-24T19:16:19Z",
+    "success": true,
+    "cache": "protein-finds-shell-v5",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6040570504,
+    "sha": "4d318206975cda5f05bf13110b04354515fa7a6e",
+    "createdAt": "2026-08-22T19:48:18Z",
+    "success": true,
+    "cache": "protein-finds-shell-v3",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6040472812,
+    "sha": "26b207153765f18ae86dd1e61e70b2d45175abb1",
+    "createdAt": "2026-08-22T19:36:17Z",
+    "success": true,
+    "cache": "protein-finds-shell-v2",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6040419147,
+    "sha": "ffa771555d1805aa129991cbed039fc73919f2ff",
+    "createdAt": "2026-08-22T19:29:49Z",
+    "success": true,
+    "cache": "protein-finds-v1",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6040388871,
+    "sha": "b51c7d9588dfa07853485607133a5a793e96c484",
+    "createdAt": "2026-08-22T19:26:13Z",
+    "success": true,
+    "cache": "protein-finds-v1",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6039841865,
+    "sha": "c54aa42aff9c43da93f3045a55760ddba96ed1ba",
+    "createdAt": "2026-08-22T18:22:34Z",
+    "success": true,
+    "cache": "protein-finds-v1",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6039663560,
+    "sha": "074a08305cb44b428d0e4cbe872477906fc28654",
+    "createdAt": "2026-08-22T18:02:37Z",
+    "success": true,
+    "cache": "protein-finds-v1",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6039615372,
+    "sha": "f4c38cd8079d9425d639f002415c67dbe54f8e0c",
+    "createdAt": "2026-08-22T17:57:16Z",
+    "success": true,
+    "cache": "protein-finds-v1",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6039534638,
+    "sha": "9abdd805cffc6eb69723c5c785faa9b96d386370",
+    "createdAt": "2026-08-22T17:47:52Z",
+    "success": true,
+    "cache": "protein-finds-v1",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 6039516764,
+    "sha": "f87ada48cdf5803f52dceaf0593e8811bf173e10",
+    "createdAt": "2026-08-22T17:45:48Z",
+    "success": true,
+    "cache": "protein-finds-v1",
+    "registrationInCommit": true
+  },
+  {
+    "deploymentId": 5924588553,
+    "sha": "7bf3ddc9a87c46df99c11110ef393cb3740693e4",
+    "createdAt": "2026-08-15T20:56:58Z",
+    "success": true,
+    "cache": null,
+    "registrationInCommit": false
+  }
+]

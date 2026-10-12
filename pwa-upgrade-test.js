@@ -108,8 +108,8 @@ function extractLegacyRelease(destination) {
       'first post-deploy visit upgrades the returning profile to the five-tab shell'
     );
     const criticalAssets = await returningPage.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name));
-    for (const asset of ['app-shell.css', 'design-standards.css', 'data.js', 'product-screener.js', 'location-data.js', 'ask-protein.js', 'app.js']) {
-      const expectedVersion = 24;
+    for (const asset of ['app-shell.css', 'data.js', 'product-screener.js', 'location-data.js', 'ask-protein.js', 'app.js']) {
+      const expectedVersion = 28;
       assert.ok(criticalAssets.some(url => url.includes(`/${asset}?v=${expectedVersion}`)), `${asset} loads through its v${expectedVersion} cache-miss URL`);
     }
 
@@ -139,10 +139,10 @@ function extractLegacyRelease(destination) {
     assert.equal(await returningPage.inputValue('[data-criterion-number="min"][data-key="protein"]'), '10', 'Screener state survives the first upgraded visit');
     assert.deepEqual(errors, [], 'returning-client upgrade has zero console or page errors');
 
-    await returningPage.waitForFunction(async () => (await caches.keys()).includes('protein-finds-shell-v24'));
-    assert.equal(await returningPage.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(245, 243, 237)', 'first returning navigation renders the product-first release');
-    assert.equal(await returningPage.locator('link[href="design-standards.css?v=24"]').count(), 1);
-    console.log('PASS: actual cached v22 profile upgrades to v24 on its first post-deploy visit via versioned new assets and preserves Search state/scroll');
+    await returningPage.waitForFunction(async () => (await caches.keys()).includes('protein-finds-shell-v28'));
+    assert.equal(await returningPage.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(243, 246, 241)', 'first returning navigation renders the product-first release');
+    assert.equal(await returningPage.locator('link[href="app-shell.css?v=28"]').count(), 1);
+    console.log('PASS: actual cached v22 profile upgrades to v28 on its first post-deploy visit via versioned new assets and preserves Search state/scroll');
   } finally {
     await context.close();
     await new Promise(resolve => server.close(resolve));

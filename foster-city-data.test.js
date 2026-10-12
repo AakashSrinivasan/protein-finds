@@ -19,7 +19,8 @@ test('Beyond Steak UPC resolves to one exact SKU with typed exact-product and Ta
   assert.equal(product.image.upc, product.exactSku.upc);
   assert.deepEqual(Array.from(product.exactSku.retailerHandoffs, handoff => handoff.type), ['exact-product', 'retailer-search']);
   const exact = product.exactSku.retailerHandoffs[0];
-  assert.equal(exact.label, 'Check Safeway on Instacart');
+  assert.equal(exact.label, 'View at Safeway on Instacart');
+  assert.equal(exact.checkState, 'rendered-identity-match');
   assert.match(exact.url, /^https:\/\/www\.instacart\.com\/products\/27918479-/);
   assert.equal(exact.availabilityStatus, 'unknown');
   assert.equal(exact.priceStatus, 'unknown');
@@ -27,6 +28,7 @@ test('Beyond Steak UPC resolves to one exact SKU with typed exact-product and Ta
   assert.equal(target.storeId, 'target-bridgepointe-san-mateo');
   assert.equal(target.label, 'Search Target');
   assert.equal(target.url, 'https://www.target.com/s?searchTerm=0810057290831');
+  assert.equal(target.enabled, false, 'inconclusive local searches are not an active handoff');
 });
 
 test('all photographed exact SKUs have identity/nutrition evidence; only verified pages use an exact retailer CTA', () => {
@@ -40,9 +42,13 @@ test('all photographed exact SKUs have identity/nutrition evidence; only verifie
   const beyond = photographed.find(product => product.id === 'beyond-steak');
   assert.equal(beyond.exactSku.retailerHandoffs.filter(handoff => handoff.type === 'exact-product').length, 1);
   for (const product of photographed) {
-    const targetSearch = product.exactSku.retailerHandoffs.find(handoff => handoff.type === 'retailer-search');
+    const targetSearch = product.exactSku.retailerHandoffs.find(handoff => handoff.retailer === 'Target');
     assert.equal(targetSearch.label, 'Search Target');
     assert.match(targetSearch.url, /^https:\/\/www\.target\.com\/s\?searchTerm=/);
     assert.match(decodeURIComponent(targetSearch.url), new RegExp(product.exactSku.upc));
+    assert.equal(targetSearch.enabled, false);
+    const usable = product.exactSku.retailerHandoffs.filter(handoff => handoff.enabled !== false);
+    assert.equal(usable.length, 1, 'every admitted package retains a checked product or search path');
+    assert.match(usable[0].checkState, /^rendered-/);
   }
 });
