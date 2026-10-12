@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict'); const fs=require('node:fs'); const path=require('node:path'); const os=require('node:os'); const http=require('node:http'); const cp=require('node:child_process');
-const history=JSON.parse(fs.readFileSync(path.join(__dirname,'review/recovery/worker-history.json')));
+const history=JSON.parse(fs.readFileSync(path.join(__dirname,'test-fixtures/worker-history.json')));
+fs.mkdirSync(path.join(__dirname,'review/recovery'),{recursive:true});
 const groups=new Map();for(const row of history)if(row.success&&row.registrationInCommit&&row.cache&&!groups.has(row.cache))groups.set(row.cache,row);
 const MIME={'.js':'application/javascript','.css':'text/css','.html':'text/html','.webmanifest':'application/manifest+json','.json':'application/json','.png':'image/png','.jpg':'image/jpeg','.ttf':'font/ttf'};
 async function waitAsync(check, timeout=20000) { const deadline=Date.now()+timeout; do { if(await check()) return; await new Promise(r=>setTimeout(r,100)); } while(Date.now()<deadline); throw new Error('Async browser condition did not become true'); }
