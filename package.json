@@ -4,7 +4,7 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "node --test catalog-contract.test.js catalog-import.test.js location-data.test.js ask-protein.test.js product-screener.test.js foster-city-data.test.js && node test-platform.js",
+    "test": "node --test catalog-contract.test.js catalog-import.test.js location-data.test.js ask-protein.test.js product-screener.test.js foster-city-data.test.js exclusion-evidence.test.js && node test-platform.js",
     "test:screener": "node --test product-screener.test.js",
     "test:ask": "node --test ask-protein.test.js",
     "test:contract": "node --test catalog-contract.test.js",
@@ -18,7 +18,7 @@
     "test:copy": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node consumer-copy-test.js",
     "verify": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node review-test.js",
     "test:pwa": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node pwa-test.js && node pwa-upgrade-test.js",
-    "test:design": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node reel-design-test.js",
+    "test:design": "REVIEW_URL=${REVIEW_URL:-http://127.0.0.1:4173/index.html} node recovery-regression-test.js",
     "serve": "python3 -m http.server 4173"
   },
   "keywords": [],

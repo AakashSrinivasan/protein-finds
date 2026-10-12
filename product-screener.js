@@ -1,5 +1,6 @@
 (function initializeProductScreener(global) {
   'use strict';
+  const evidence = global.ProteinEvidence || (typeof require === 'function' ? require('./product-evidence') : null);
 
   const knownText = value => typeof value === 'string' && value.trim().length > 0;
   const numeric = value => Number.isFinite(Number(value)) ? Number(value) : null;
@@ -96,11 +97,7 @@
   }
 
   function allergenPass(product, allergen) {
-    const token = allergen.toLowerCase();
-    if (EXCLUSIONS[token]) return product[EXCLUSIONS[token].field] === true;
-    const declared = product.exactSku?.allergens;
-    if (!Array.isArray(declared)) return false;
-    return !declared.some(value => String(value).toLowerCase().includes(token));
+    return evidence?.exclusionPass(product, allergen) === true;
   }
 
   function evaluate(product, screen) {
@@ -172,7 +169,8 @@
     if(/low[- ]sugar/.test(q)) add('sugar',null,5); if(/high[- ]fiber/.test(q)) add('fiber',5);
     next.criteria=criteria.length?criteria:next.criteria;
     if(/vegan/.test(q)) next.diet='vegan'; else if(/vegetarian/.test(q)) next.diet='vegetarian';
-    for(const key of Object.keys(EXCLUSIONS)) if(new RegExp(`${key}[- ]free|no ${key}|avoid ${key}`).test(q)&&!next.allergens.includes(key)) next.allergens.push(key);
+    for(const key of Object.keys(EXCLUSIONS)) if(new RegExp(`${key}[- ]free|no ${key}|without ${key}|avoid ${key}`).test(q)&&!next.allergens.includes(key)) next.allergens.push(key);
+    for (const match of q.matchAll(/\b(?:no|without|avoid)\s+([a-z]+)\b/g)) if (!['more','less','than'].includes(match[1]) && !next.allergens.includes(match[1])) next.allergens.push(match[1]);
     next.categories=[...new Set(products.filter(p=>q.includes(String(p.category).toLowerCase())).map(p=>p.category))];
     next.stores=[...new Set(products.flatMap(p=>p.stores||[]).filter(store=>q.includes(store.toLowerCase())))];
     if(/ready|grab[- ]and[- ]go/.test(q)) next.prep=['Ready now'];

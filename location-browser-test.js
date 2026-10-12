@@ -72,7 +72,7 @@ async function exerciseZipAndMap(browserType) {
   const beforeSearch = await page.evaluate(() => window.ProteinFinds.state.location);
   await page.locator('.leaflet-control-zoom-in').click();
   await page.waitForFunction(() => !document.querySelector('[data-search-here]').disabled);
-  assert.match(await page.locator('.map-status').textContent(), /results unchanged/);
+  assert.match(await page.locator('.map-status b').textContent(), /^Search this area to update stores$/, 'map movement tells the user results require an explicit refresh');
   assert.deepEqual(await page.evaluate(() => window.ProteinFinds.state.location), beforeSearch, 'panning does not silently refresh results');
   await page.locator('[data-search-here]').click();
   assert.equal(await page.locator('.location-heading > b').textContent(), 'Searched map area');

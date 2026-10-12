@@ -38,7 +38,7 @@ test('plans common intents deterministically and visibly', () => {
 });
 
 test('answers supported discovery requests only from catalog records', () => {
-  for (const query of ['cheap breakfast protein','soy-free snacks','best protein cereal']) {
+  for (const query of ['cheap breakfast protein','best protein cereal']) {
     const first = answerAsk({query, products, basketIds:[]});
     const second = answerAsk({query, products, basketIds:[]});
     assert.deepEqual(first, second, `${query} is deterministic`);
@@ -46,7 +46,7 @@ test('answers supported discovery requests only from catalog records', () => {
     assert.ok(first.recommendations.length > 0, `${query} returns a useful result`);
     assert.equal(first.mode, 'deterministic');
   }
-  assert.deepEqual(answerAsk({query:'soy-free snacks', products, basketIds:[]}).recommendations.map(item => item.productId), ['cookie','milk']);
+  assert.deepEqual(answerAsk({query:'soy-free snacks', products, basketIds:[]}).recommendations.map(item => item.productId), [], 'unsupported legacy free flags cannot admit a product');
   assert.equal(answerAsk({query:'best protein cereal', products, basketIds:[]}).recommendations[0].productId, 'cereal');
 });
 

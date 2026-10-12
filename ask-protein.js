@@ -5,6 +5,7 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') window.AskProtein = api;
 })(function buildAskProtein() {
+  const evidence = typeof window !== 'undefined' ? window.ProteinEvidence : require('./product-evidence');
   const tripGroups = [
     {key:'main', label:'main protein', categories:['Plant meat','Egg']},
     {key:'breakfast', label:'breakfast option', categories:['Breakfast','Wraps & breads']},
@@ -17,17 +18,18 @@
   function planAsk(query) {
     const tokens = normalizedTokens(query);
     const text = tokens.join(' ');
+    const exclusionConstraints = /\b(soy[- ]free|no soy|without soy|avoid soy)\b/.test(text) ? ['soyFree'] : [];
     if (/\b(improve|fix|complete|round out)\b/.test(text) && /\bbasket\b/.test(text)) {
       return {intent:'basket-improvement', filters:{basket:'current'}, sort:'missing-category-fit', constraints:[], tokens};
     }
     if (/\bcereal\b/.test(text)) {
-      return {intent:'discover', filters:{category:'Breakfast', text:'cereal'}, sort:'efficiency', constraints:[], tokens};
+      return {intent:'discover', filters:{category:'Breakfast', text:'cereal'}, sort:'efficiency', constraints:exclusionConstraints, tokens};
     }
-    if (/\bsoy-free\b/.test(text) && /\bsnacks?\b/.test(text)) {
+    if (/\b(soy[- ]free|no soy|without soy|avoid soy)\b/.test(text) && /\bsnacks?\b/.test(text)) {
       return {intent:'discover', filters:{useCase:'snack'}, sort:'recommended', constraints:['soyFree'], tokens};
     }
     if (/\bcheap\b/.test(text) && /\bbreakfast\b/.test(text) && /\bprotein\b/.test(text)) {
-      return {intent:'discover', filters:{useCase:'breakfast'}, sort:'pricePer25', constraints:[], tokens};
+      return {intent:'discover', filters:{useCase:'breakfast'}, sort:'pricePer25', constraints:exclusionConstraints, tokens};
     }
     return {intent:'unsupported', filters:{}, sort:null, constraints:[], tokens};
   }
@@ -65,7 +67,7 @@
       if (plan.filters.category && product.category !== plan.filters.category) return false;
       if (plan.filters.text && ![product.name, product.brand, product.category].join(' ').toLowerCase().includes(plan.filters.text)) return false;
       if (plan.filters.useCase && (!Array.isArray(product.useCases) || !product.useCases.includes(plan.filters.useCase))) return false;
-      return plan.constraints.every(constraint => product[constraint] === true);
+      return plan.constraints.every(constraint => constraint === 'soyFree' ? evidence?.exclusionPass(product, 'soy') === true : false);
     });
     const sorters = {
       pricePer25: (left, right) => Number(!knownPrice(left)) - Number(!knownPrice(right)) || Number(left.pricePer25 ?? Infinity) - Number(right.pricePer25 ?? Infinity) || left.id.localeCompare(right.id),
